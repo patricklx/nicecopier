@@ -1,0 +1,25 @@
+#tasklist .QWidget{
+	background-image: url(style/seamlesspattern52.jpg);
+	background-repeat: repeat-y;
+	
+}
+
+#tasklist QLabel#lbTo,#tasklist QLabel#LbFrom,#tasklist QLabel#label_8{
+	font: bold 11pt "Courier New";
+}
+
+#tasklist QLabel#lbfilesize{
+	font: bold 9pt "Courier New";
+}
+
+#tasklist QLabel#lbfile{
+	font: bold 10pt "Courier New";
+}
+
+#tasklist QLabel{
+	font: 10pt "Courier New";
+}
+
+#tasklist .QWidget .QGroupBox{
+	background-color: rgba(255,255,255,200);
+}

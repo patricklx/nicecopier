@@ -1,0 +1,26 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/add_file.ico</file>
+        <file>icons/add_folder.ico</file>
+        <file>icons/cancel.ico</file>
+        <file>icons/check.ico</file>
+        <file>icons/contract.ico</file>
+        <file>icons/delete_file.ico</file>
+        <file>icons/expand.ico</file>
+        <file>icons/folder_delete.ico</file>
+        <file>icons/ignore.ico</file>
+        <file>icons/pause_copy.ico</file>
+        <file>icons/rename.ico</file>
+        <file>icons/retry.ico</file>
+        <file>icons/start_copy.ico</file>
+        <file>icons/copy.ico</file>
+        <file>icons/Copy2.ico</file>
+        <file>icons/find/casesensitively.png</file>
+        <file>icons/find/magnifier.png</file>
+        <file>icons/find/regexp.png</file>
+        <file>icons/find/wholewords.png</file>
+        <file>icons/find/wordandcase.png</file>
+        <file>icons/find/wrapindicator.png</file>
+        <file>icons/find/editclear.png</file>
+    </qresource>
+</RCC>

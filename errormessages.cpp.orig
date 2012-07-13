@@ -1,0 +1,227 @@
+#include "errormessages.h"
+#include "ui_errormessages.h"
+#include <QDesktopWidget>
+#include <QMessageBox>
+#include "TaskThread/ReadableSize.h"
+
+DlgErrorMessages::DlgErrorMessages(QWidget *parent) :
+    QDialog(parent),
+    ui(new Ui::ErrorMessages)
+{
+    ui->setupUi(this);
+    ui->BtOk->setDefault(true);
+    ui->BtRetry->hide();
+    setWindowTitle(tr("NiceCopier message"));
+    adjustSize();
+}
+
+DlgErrorMessages::~DlgErrorMessages()
+{
+    delete ui;
+}
+
+
+bool DlgErrorMessages::SetErrors(TaskThread *thread, int type)
+{
+    m_thread = thread;
+    //Set top items list
+    QList<TreeItem*> items;
+
+    for(int i=0;i<thread->Directories->subfolder_list.count();i++)
+        items.append(thread->Directories->subfolder_list[i]->treeitem);
+
+    for(int i=0;i<thread->Directories->file_list.count();i++)
+        items.append(thread->Directories->file_list[i]->treeitem);
+    ui->treeWidget->SetTopList(items,thread);
+
+
+    if(type==ER_FILE_DEST_EXIST)
+    {
+        bool ok = ui->treeWidget->ShowExist();
+        ui->lbDestination->setText(ui->treeWidget->destination);
+        ui->lbDestination->setToolTip(ui->lbDestination->text());
+        ui->lbSource->setText(thread->Source);
+        ui->lbSource->setToolTip(ui->lbSource->text());
+
+        if(thread->Destination == thread->Source)
+        {
+            ui->treeWidget->treeWidget->blockSignals(true);
+            TreeItem *root = (TreeItem*) ui->treeWidget->treeWidget->rootIndex().internalPointer();
+            for(int i=0;i<root->childCount();i++)
+            {
+                TreeItem *item = root->child(i);
+                item->rename(true);
+            }
+            ui->treeWidget->treeWidget->blockSignals(false);
+            on_BtOk_clicked();
+            return false;
+        }
+        return ok;
+    }
+
+    if(type==EDIT_MODE || type == FREE_SPACE_MODE)
+    {
+        ui->treeWidget->ShowAll();
+        ui->lbDestination->setText(ui->treeWidget->destination);
+        ui->lbDestination->setToolTip(ui->lbDestination->text());
+        ui->lbSource->setText(thread->Source);
+        ui->lbSource->setToolTip(ui->lbSource->text());
+        ui->label->setText(tr("Edit file copy tree"));
+        if(type == FREE_SPACE_MODE)
+        {
+            QString msg = tr("Not enough size in destination!\n You need at least: ")+
+                          toReadableSize( thread->TotalSize )+
+                          tr("\nOr don't copy some files/folders");
+            ui->label->setText(msg);
+        }
+        return true;
+    }
+}
+
+
+bool DlgErrorMessages::SetErrors(TaskThread *thread, QList<mFile *> &files, int type)
+{
+    ui->label->setText(tr("An error occurred"));
+    ui->BtRetry->show();
+    ui->BtReplace->hide();
+    ui->BtRename->hide();
+    adjustSize();
+    m_thread = thread;
+    ui->treeWidget->SetErrorList(thread->Directories,files);
+    ui->lbDestination->setText(ui->treeWidget->destination);
+    ui->lbDestination->setToolTip(ui->lbDestination->text());
+    ui->lbSource->setText(thread->Source);
+    ui->lbSource->setToolTip(ui->lbSource->text());
+    return true;
+}
+
+void DlgErrorMessages::on_BtOk_clicked()
+{
+    close();
+}
+
+void DlgErrorMessages::on_BtCancel_clicked()
+{
+    m_thread->Exit();
+    close();
+}
+
+void DlgErrorMessages::on_BtIgnore_clicked()
+{
+    QModelIndexList items = ui->treeWidget->treeWidget->selectedIndexes();
+
+    if(items.count()==0)
+    {
+        QList<TreeItem*> *topitems = &ui->treeWidget->m_model->topLevelItems;
+        for(int i=0;i<topitems->count();i++)
+        {
+            TreeItem *item = topitems->value(i);
+            if( item->data(COL_IGNORE) != Qt::Checked )
+            {
+                item->ignore(true);
+                ui->treeWidget->m_model->UpdateItem(item);
+            }
+        }
+    }
+
+    for(int i=0;i<items.count();i++)
+    {
+        TreeItem *item = (TreeItem*) items[i].internalPointer();
+        if( item->data(COL_IGNORE) != Qt::Checked )
+        {
+            item->ignore(true);
+            ui->treeWidget->m_model->UpdateItem(item);
+        }
+    }
+}
+
+void DlgErrorMessages::on_BtRename_clicked()
+{
+    QModelIndexList items = ui->treeWidget->treeWidget->selectedIndexes();
+
+    if(items.count()==0)
+    {
+        QList<TreeItem*> *topitems = &ui->treeWidget->m_model->topLevelItems;
+        for(int i=0;i<topitems->count();i++)
+        {
+            TreeItem *item = topitems->value(i);
+            if( item->data(COL_RENAME) != tr("") )
+            {
+                item->rename(true);
+                ui->treeWidget->m_model->UpdateItem(item);
+            }
+        }
+    }
+
+    for(int i=0;i<items.count();i++)
+    {
+        TreeItem *item = (TreeItem*) items[i].internalPointer();
+        if( item->data(COL_RENAME) != tr("") )
+        {
+            item->rename(true);
+           ui->treeWidget->m_model->UpdateItem(item);
+        }
+    }
+}
+
+void DlgErrorMessages::on_BtReplace_clicked()
+{
+    QModelIndexList items = ui->treeWidget->treeWidget->selectedIndexes();
+    ui->treeWidget->treeWidget->blockSignals(true);
+
+    if(items.count()==0)
+    {
+        QList<TreeItem*> *topitems = &ui->treeWidget->m_model->topLevelItems;
+        for(int i=0;i<topitems->count();i++)
+        {
+            TreeItem *item = topitems->value(i);
+            if( item->data(COL_REPLACE) != Qt::Checked )
+            {
+                item->replace(true);
+                ui->treeWidget->m_model->UpdateItem(item);
+            }
+        }
+    }
+
+    for(int i=0;i<items.count();i++)
+    {
+        TreeItem *item = (TreeItem*) items[i].internalPointer();
+        if( item->data(COL_REPLACE) != Qt::Checked )
+        {
+            item->replace(true);
+            ui->treeWidget->m_model->UpdateItem(item);
+        }
+    }
+}
+
+void DlgErrorMessages::on_BtRetry_clicked()
+{
+    QModelIndexList items = ui->treeWidget->treeWidget->selectedIndexes();
+    ui->treeWidget->treeWidget->blockSignals(true);
+
+    if(items.count()==0)
+    {
+        QList<TreeItem*> *topitems = &ui->treeWidget->m_model->topLevelItems;
+        for(int i=0;i<topitems->count();i++)
+        {
+            TreeItem *item = topitems->value(i);
+            if( item->data(COL_REPLACE) != Qt::Checked )
+            {
+                if(item->m_file)
+                    item->m_file->retry = true;
+                ui->treeWidget->m_model->UpdateItem(item);
+            }
+        }
+    }
+
+    for(int i=0;i<items.count();i++)
+    {
+        TreeItem *item = (TreeItem*) items[i].internalPointer();
+        if( item->data(COL_REPLACE) != Qt::Checked )
+        {
+            if(item->m_file)
+                item->m_file->retry = true;
+            ui->treeWidget->m_model->UpdateItem(item);
+        }
+    }
+}

@@ -1,0 +1,861 @@
+#include "copyinfopanel.h"
+#include "ui_copyinfopanel.h"
+#include "TaskThread/ReadableSize.h"
+#include "ncsettings.h"
+#include "errormessages.h"
+#include <QTime>
+#include <QPushButton>
+#include <QMetaType>
+#include <QMessageBox>
+#include <QFileDialog>
+#include "filelist.h"
+#include <QInputDialog>
+#include <QFileIconProvider>
+#include <QDesktopWidget>
+#include <QModelIndex>
+#include <QModelIndexList>
+
+#define mFileList QList<mFile*>*
+
+Q_DECLARE_METATYPE(mFileList)
+
+CopyInfoPanel::CopyInfoPanel(QWidget *parent) :
+    QFrame(parent),
+    ui(new Ui::CopyInfoPanel)
+{
+    ui->setupUi(this);
+
+    button = new QPushButton(ui->groupBox);
+    ui->infoWidget->hide();
+    ui->editWidget->setChecked(false);
+    ui->editWidget->setToolTip(tr("You must wait until preparation is done"));
+    adjustSize();
+    connect(&UpdateTimer,SIGNAL(timeout()),SLOT(TimerUpdateGui()));
+
+
+    ui->progressBar->setMinimumSize(ui->progressBar->size());
+    this->setMinimumSize(size());
+
+    ui->lbfilesize->clear();
+    ui->lbpercentage_done->clear();
+    ui->lbfile->clear();
+    ui->lbfile_count->clear();
+    ui->lbFromPath->clear();
+    ui->lbtoPath->clear();
+    ui->lbpercentage_done->clear();
+    ui->lbsize->clear();
+    ui->lbspeed->clear();
+    ui->lbtotal_size->clear();
+    ui->lb_of->clear();
+
+
+    button->resize(25,25);
+    button->setMinimumSize(25,25);
+    button->setMaximumSize(25,25);
+    QIcon icon1(tr(":/icons/expand.ico"));
+    button->setIcon(icon1);
+    QPoint p = rect().topRight();
+    p.setY(p.y()+6);
+    p.setX(p.x()-24);
+    button->move( p );
+    button->show();
+
+    connect(button,SIGNAL(clicked()),SLOT(expand()));
+
+    qRegisterMetaType<mFileList>();
+
+    Task = NULL;
+    StartedByUser = false;
+    stoppedByUser = false;
+    average_speed = 0;
+    intermed_size = 0;
+    intermed_size3 = 0;
+    update_filedone = 0;
+}
+
+void CopyInfoPanel::closeEvent(QCloseEvent *evt)
+{
+    if(evt->spontaneous())
+    {
+        evt->setAccepted(false);
+        contract();
+    }
+}
+
+void CopyInfoPanel::expand()
+{
+    button->setIcon(QIcon(tr(":/icons/contract.ico")));
+    disconnect(button,SIGNAL(clicked()),this,SLOT(expand()));
+    connect(button,SIGNAL(clicked()),SLOT(contract()));
+
+    this->setMaximumSize(16777215,16777215);
+    ui->infoWidget->show();
+    layout();
+    adjustSize();
+    this->setMinimumSize(this->minimumSize().width(),size().height());
+    Expand(this);
+}
+
+void CopyInfoPanel::contract()
+{
+    button->setIcon(QIcon(tr(":/icons/expand.ico")));
+    disconnect(button,SIGNAL(clicked()),this,SLOT(contract()));
+    connect(button,SIGNAL(clicked()),SLOT(expand()));
+
+    ui->infoWidget->hide();
+    this->setMinimumSize(this->minimumWidth(),0);
+    adjustSize();
+    this->setMaximumSize(this->minimumWidth(),size().height());
+    this->setMinimumSize(this->minimumWidth(),size().height());
+    Contract(this);
+}
+
+void CopyInfoPanel::resizeEvent(QResizeEvent *q)
+{
+    QPoint p = rect().topRight();
+    p.setY(p.y()+6);
+    p.setX(p.x()-24);
+    button->move( p );
+    button->show();
+}
+
+
+CopyInfoPanel::~CopyInfoPanel()
+{
+    if( Task != NULL )
+    {
+        Task->disconnect();
+        if(Task->isRunning())
+        {
+            Task->Exit(true);
+            Task->wait();
+        }
+        delete Task;
+        Task = NULL;
+    }
+    delete button;
+    delete ui;
+}
+
+
+void CopyInfoPanel::CopyError(TaskThread *thread, QList<mFile*> *list,int type)
+{
+    DlgErrorMessages *errordlg = new DlgErrorMessages(this);
+    errordlg->SetErrors(thread,*list,type);
+    errordlg->show();
+    errordlg->move(QApplication::desktop()->rect().center()-QPoint(errordlg->width(),errordlg->height())/2);
+    errordlg->activateWindow();
+    errordlg->raise();
+    while(errordlg->isVisible())
+    {
+        QApplication::processEvents();
+        QThread::msleep(50);
+    }
+
+    delete errordlg;
+    ui->CopyFileTree->ShowAll();
+}
+
+void CopyInfoPanel::ThreadMessage(QString msg,int *answer,int buttons)
+{
+    QMessageBox message(this);
+    message.setWindowTitle(tr("NiceCopier message"));
+    message.setStandardButtons((QMessageBox::StandardButton)buttons);
+    message.setText(tr("Source: ") + Task->Source+
+                    tr("\nDestination: ") + Task->Destination);
+
+    message.setInformativeText(msg);
+    message.show();
+    message.move(QApplication::desktop()->rect().center()-QPoint(message.width(),message.height())/2);
+    while(1)
+    {
+        if(!message.isVisible())
+        {
+            message.setEscapeButton(QMessageBox::NoButton);
+            int res = message.standardButton(message.clickedButton());
+
+
+            if(res!=QMessageBox::NoButton)
+            {
+                if(answer)
+                    *answer = res;
+                break;
+            }
+            else
+                message.show();
+        }
+        QApplication::processEvents();
+        QThread::msleep(50);
+    }
+
+}
+
+void CopyInfoPanel::ErrorMessage(TaskThread *thread, int error)
+{
+    QList<TreeItem*> items;
+    for(int i=0;i<Task->Directories->subfolder_list.count();i++)
+    {
+        SetDefaultHandle(Task->Directories->subfolder_list[i]->treeitem);
+        items.append(Task->Directories->subfolder_list[i]->treeitem);
+    }
+
+    for(int i=0;i<Task->Directories->file_list.count();i++)
+    {
+        SetDefaultHandle(Task->Directories->file_list[i]->treeitem);
+        items.append(Task->Directories->file_list[i]->treeitem);
+    }
+
+    ui->CopyFileTree->SetTopList(items,Task);
+
+    DlgErrorMessages *errordlg = new DlgErrorMessages(this);
+    int errors = errordlg->SetErrors(thread,error);
+    if(errors)
+    {
+        errordlg->show();
+    }
+
+    errordlg->move(QApplication::desktop()->rect().center()-QPoint(errordlg->width(),errordlg->height())/2);
+
+
+    while(errordlg->isVisible())
+    {
+        QApplication::processEvents();
+        QThread::msleep(50);
+    }
+    delete errordlg;
+
+    ui->CopyFileTree->ShowAll();
+}
+
+void CopyInfoPanel::TaskStarting()
+{
+    UpdateTimer.start(100);
+    ui->progressBar->setMaximum(0);
+
+    QIcon icon1;
+    icon1.addFile(tr(":/icons/pause_copy.ico"));
+    ui->BtStart->setIcon(icon1);
+
+    if(!StartedByUser)
+        StartEvent(this);
+}
+
+
+void CopyInfoPanel::SetDefaultHandle(TreeItem *treeitem)
+{
+    if( treeitem->data(COL_EXISTS).isValid() )
+    {
+        switch(ncsettings::DefaultExistHandle())
+        {
+        case HANDLE_REPLACE:
+            treeitem->replace(true);
+            break;
+        case HANDLE_RENAME:
+            treeitem->rename(true);
+            break;
+
+        case HANDLE_IGNORE:
+            treeitem->ignore(true);
+            break;
+        }
+    }
+}
+
+void CopyInfoPanel::TaskPrepared()
+{
+    ui->progressBar->setMaximum(1000);
+    ui->lbtotal_size->setText( toReadableSize( Task->TotalSize) );
+    ui->lb_of->setText(tr("of"));
+    ui->lbsize->setText("0B");
+    layout(); 
+    ui->editWidget->setToolTip(tr(""));
+
+    QList<TreeItem*> items;
+    for(int i=0;i<Task->Directories->subfolder_list.count();i++)
+    {
+        SetDefaultHandle(Task->Directories->subfolder_list[i]->treeitem);
+        items.append(Task->Directories->subfolder_list[i]->treeitem);
+    }
+
+    for(int i=0;i<Task->Directories->file_list.count();i++)
+    {
+        SetDefaultHandle(Task->Directories->file_list[i]->treeitem);
+        items.append(Task->Directories->file_list[i]->treeitem);
+    }
+
+    ui->CopyFileTree->SetTopList(items,Task);
+    ui->CopyFileTree->ShowAll();
+
+    if(ui->cbedit->isChecked())
+    {
+        if(!Task->IsPaused())
+            on_BtStart_clicked();//pause
+        if(!ui->infoWidget->isVisible())
+            expand();
+    }
+}
+
+void CopyInfoPanel::TaskCopyDone()
+{
+    UpdateTimer.stop();
+    QGroupBox *box = ui->groupBox;
+
+
+    ui->progressBar->setValue(ui->progressBar->maximum());
+    ui->lbsize->setText(toReadableSize(Task->TotalSize));
+    ui->lbfile_count->clear();
+
+    ui->lbfilesize->clear();
+    ui->lbpercentage_done->setText(tr("100%"));
+
+
+    if(Task->Delete_Source)
+    {
+        int time = ncsettings::DeleteTime()*1000;
+        QString str_time;
+        str_time.setNum(time);
+        box->setTitle(tr("Deleting Source in ") + str_time + tr(" sec"));
+        while(time > 0 && !Task->_EXIT)
+        {
+            time -= 50;
+            QThread::msleep(50);
+
+            QApplication::processEvents();
+            str_time.setNum(time/1000+1);
+            box->setTitle(tr("Deleting Source in ") + str_time + tr(" sec"));
+        }
+    }
+    box->setTitle(tr("Copy Done"));
+}
+
+void CopyInfoPanel::Taskfinished()
+{
+    UpdateTimer.stop();
+    if(Task)
+    {
+        if(!stoppedByUser)
+            CopyTasksHandler->AThreadTerminated(Task);
+        else
+            CopyTasksHandler->Remove(Task);
+    }
+    FinishedEvent(this);
+}
+
+
+void CopyInfoPanel::SetGroupName(QString title)
+{
+    ui->groupBox->setTitle(title);
+}
+
+
+void CopyInfoPanel::on_BtStart_clicked()
+{
+    if(Task == NULL)
+        return;
+
+    //Update total size after editing
+    ui->lbtotal_size->setText( toReadableSize( Task->TotalSize) );
+
+    if(!Task->Started)
+    {
+        Task->start();
+        StartedByUser = true;
+        ui->BtStart->setIcon(QIcon(tr(":/icons/pause_copy.ico")));
+        return;
+    }
+
+    if(!Task->IsPaused())
+    {
+        Task->Pause();
+        UpdateTimer.stop();
+        ui->BtStart->setIcon(QIcon(tr(":/icons/start_copy.ico")));
+        if(Task->PrepareDone)
+            ui->editWidget->setChecked(true);
+
+
+        mFile *file = Task->FileCopyQueue.ActFile;
+        if( file != NULL )
+        {
+            //ui->CopyFileTree->treeWidget->scrollTo();
+        }
+        return;
+    }else
+    {
+        Task->Resume();
+        UpdateTimer.start();
+        ui->BtStart->setIcon(QIcon(tr(":/icons/pause_copy.ico")));
+        ui->editWidget->setChecked(false);
+
+        if(Task->PrepareDone)
+        {
+            ui->cbedit->setCheckable(false);
+            Task->edit = false;
+        }
+        return;
+    }
+}
+
+void CopyInfoPanel::on_BtStop_clicked()
+{
+    if(!Task)
+    {
+        return;
+    }
+
+    bool paused = Task->IsPaused();
+
+    Task->Pause();
+
+    if(ncsettings::ConfirmCancel())
+    {
+        int ans = QMessageBox::question(this,tr("Confirm Cancel"),tr("Do you really want to cancel this task?"),QMessageBox::Yes|QMessageBox::No);
+        if(ans == QMessageBox::No)
+        {
+            if(Task && !paused)//be sure that the task still exists
+                Task->Resume();
+            return;
+        }
+    }
+
+    if(ncsettings::DeleteDestCancel() && Task->PrepareDone && Task->Directories->started_copy)
+    {
+        if(ncsettings::ConfirmDelete())
+        {
+            int ans = QMessageBox::question(this,tr("Confirm Delete"),tr("Delete all copied files?"),QMessageBox::Yes|QMessageBox::No);
+            if(ans == QMessageBox::Yes)
+            {
+                if(Task)//be sure that the task still exists
+                    Task->Delete_Dest = true;
+            }
+        }else
+        {
+            if(Task)//be sure that the task still exists
+                Task->Delete_Dest = true;
+        }
+    }
+    if(!Task)//be sure that the task still exists
+        return;
+
+    stoppedByUser = true;
+
+    if(Task->Started)
+        Task->Exit();
+    else
+        Taskfinished();
+}
+
+
+bool CopyInfoPanel::CreateTask( QIODevice &info )
+{
+
+    Task = new TaskThread( info );
+    connect(Task,SIGNAL(Starting()),SLOT(TaskStarting()));
+    connect(Task,SIGNAL(CopyDone()),SLOT(TaskCopyDone()),Qt::BlockingQueuedConnection);
+    connect(Task,SIGNAL(signal_message(QString,int*,int)),SLOT(ThreadMessage(QString,int*,int)),Qt::BlockingQueuedConnection);
+    connect(Task,SIGNAL(finished()),SLOT(Taskfinished()));
+    connect(Task,SIGNAL(Prepared()),SLOT(TaskPrepared()),Qt::BlockingQueuedConnection);
+    connect(&Task->PrepareFiles,SIGNAL(ErrorMessage(TaskThread*,int)),SLOT(ErrorMessage(TaskThread*,int)),Qt::BlockingQueuedConnection);
+    connect(&Task->FileCopyQueue,SIGNAL(Show_Errors(TaskThread*,QList<mFile*>*,int)),SLOT(CopyError(TaskThread*,QList<mFile*>*,int)),Qt::BlockingQueuedConnection);
+    int id = Task->IsFileLoaded();
+    if( id != -1 )
+    {
+        if(Task->edit)
+            ui->cbedit->setChecked(Qt::Checked);
+        if( Task->TotalSizeDone != 0 && Task->TotalSize != 0)
+        {
+            ui->lb_of->setText(tr("of"));
+            ui->lbsize->setText( toReadableSize( Task->TotalSize ) + tr(" ") );
+            ui->lbfile_count->setNum( Task->TotalFiles );
+            UpdateSize();
+            layout();
+        }
+        ui->lbFromPath->setText(Task->Source);
+        ui->lbFromPath->setToolTip(Task->Source);
+
+        ui->lbtoPath->setText(Task->Destination);
+        ui->lbtoPath->setToolTip(Task->Destination);
+
+        ui->lbfile->setText( Task->lastFileCp );
+        ui->lbfile->setToolTip( Task->lastFileCp );
+
+
+        if( CopyTasksHandler->Add( Task ) ) //returns true if task is started immediatily
+        {
+            layout();
+            return true;
+        }
+
+        if(Task->start_now && !Task->was_paused)
+        {
+            Task->start();
+            return true;
+        }
+
+        if(Task->PrepareDone)
+        {
+            TaskPrepared();
+        }
+
+        QGroupBox *box = ui->groupBox;
+        switch( Task->GetCpType() )
+        {
+            case(DISK_TO_DISK):
+            {
+                box->setTitle(tr("Enqueued - Disk to Disk") );
+            }
+            break;
+            case(LOCAL_NETWORK):
+            {
+                box->setTitle(tr("Enqueued - LAN") );
+            }
+            break;
+            case(TO_INET):
+            {
+                box->setTitle(tr("Enqueued - To internet location") );
+            }
+            break;
+            case(FROM_INET):
+            {
+                box->setTitle(tr("Enqueued - From internet location") );
+            }
+            break;
+            case(FROM_CDDVD):
+            {
+                box->setTitle(tr("Enqueued - From CD/DVD") );
+            }
+            break;
+        }
+        return true;
+    }
+    else
+    {
+        delete Task;
+        Task = NULL;
+        return false;
+    }
+    return true;
+}
+
+
+void CopyInfoPanel::TimerUpdateGui()
+{
+    QMutexLocker lock( &Task->info_mutex );
+    if( Task->lastFileCp != FileDoneUpdate )
+    {
+        update_filedone = 1500;
+        ui->lbpercentage_done->setText(tr(""));
+        ui->lbfilesize->clear();
+        FileDoneUpdate = Task->lastFileCp;
+        watchfiledone.restart();
+    }
+
+    if( Task == NULL )
+    {
+        UpdateTimer.stop();
+        return;
+    }
+    if( watchSize.elapsed() > 100 )
+    {
+        if( Task->IsPreparing() == false )
+            UpdateSize();
+        else
+            UpdateSearchfiles();
+        watchSize.restart();
+    }
+
+    if( Task->IsPreparing() == false)
+    {
+        if( watchSpeed.elapsed() > 3000 )
+        {
+            UpdateSpeed(watchSpeed.elapsed());
+            watchSpeed.restart();
+        }
+        if( watchTime.elapsed() > 1000 )
+        {
+            UpdateTime();
+            watchTime.restart();
+        }
+        if( adjustSpeed.elapsed() > 10000 )
+        {
+            Calc_mid_speed(adjustSpeed.elapsed());
+            adjustSpeed.restart();
+        }
+
+        if( watchfiledone.elapsed() > update_filedone )
+        {
+            UpdateFileDone();
+            update_filedone = 250;
+            watchfiledone.restart();
+        }
+    }
+    this->layout();
+}
+
+void CopyInfoPanel::UpdateSearchfiles()
+{
+    ui->lbtotal_size->setText( toReadableSize( Task->TotalSize )+tr(" ") );
+    ui->lbfile_count->setNum( Task->TotalFiles );
+    ui->lbfile->setText( Task->lastFileCp );
+    ui->lbfile->setToolTip( Task->lastFileCp );
+}
+
+void CopyInfoPanel::UpdateSize( )
+{
+    int  perc = 1000.0 * Task->TotalSizeDone / Task->TotalSize;
+
+    ui->progressBar->setValue( perc );
+    ui->lbsize->setText(toReadableSize( Task->TotalSizeDone ));
+    QString count; count.setNum( Task->TotalFiles );
+    ui->lbfile_count->setText(  tr(" (") + count + tr(")")  );
+
+    ui->lbfile->setText( Task->lastFileCp );
+    ui->lbfile->setToolTip( Task->lastFileCp );
+
+
+}
+
+void CopyInfoPanel::UpdateTime(  )
+{
+    if( !Task->GetActFileError().isEmpty() )
+    {
+        return;
+    }else
+    {
+        if( average_speed != 0 )
+        {
+            int timeleft = 1.0*(Task->TotalSize - Task->TotalSizeDone) / average_speed;
+            int h = timeleft/3600;
+            int m = (timeleft % 3600) /60;
+            int s = (timeleft % 3600) % 60;
+
+            QString t;
+            if( h != 0 )
+                t.sprintf("%dH:%dm:%ds",h,m,s);
+            else
+            if( m != 0 )
+                t.sprintf("%dm:%ds",m,s);
+            else
+            if( s != 0 )
+                t.sprintf("%ds",s);
+
+            ui->groupBox->setTitle(tr("TIME LEFT: ") + t );
+        }
+   }
+}
+
+void CopyInfoPanel::UpdateFileDone()
+{
+    int prc = 100.0*Task->GetActFileCpySize()/Task->GetActFileSize();
+    QString text;
+    text.setNum(prc);
+
+    ui->lbpercentage_done->setText(text+tr("%"));
+    ui->lbfilesize->setText(toReadableSize(Task->GetActFileSize()-Task->GetActFileCpySize()) );
+    mFile *file = Task->FileCopyQueue.ActFile;
+    if( file != NULL )
+    {
+        ui->CopyFileTree->treeWidget->update(file->treeitem->index);
+    }
+}
+
+void CopyInfoPanel::UpdateSpeed( int time )
+{
+    size_t intermed_speed =  1000.0*(Task->TotalCpSize - intermed_size) / time;
+
+    if( average_speed != 0 )
+        average_speed = ( average_speed + intermed_speed ) / 2;
+    else
+        average_speed = intermed_speed;
+    QString speed = toReadableSpeed( average_speed );
+
+    ui->lbspeed->setText(speed);
+    intermed_size = Task->TotalCpSize;
+
+}
+
+void CopyInfoPanel::Calc_mid_speed( int time )
+{
+    average_speed =  1000.0*(Task->TotalCpSize - intermed_size3) / time;
+    intermed_size3 = Task->TotalCpSize;
+
+}
+
+
+
+void CopyInfoPanel::on_btaddfile_clicked()
+{
+    QModelIndexList itemlist = ui->CopyFileTree->treeWidget->selectionModel()->selectedRows();
+
+    if(itemlist.count() > 1)
+    {
+        QMessageBox::information(this,tr("Select one item"),tr("Select only one item or none"));
+        return;
+    }
+
+    QFileDialog filedialog(this);
+    filedialog.exec();
+
+    if(filedialog.result() == false)
+        return;
+
+    QStringList filelist = filedialog.selectedFiles();
+
+    for(int i=0;i<filelist.count();i++)
+    {
+        QFileInfo file(filelist[i]);
+        mFile *f;
+        if(itemlist.count() == 0)
+        {
+            f = new mFile(Task,Task->Directories,file);
+            f->parent_folder->file_list.insert(0,f);
+            ui->CopyFileTree->m_model->addTopLevelItem(f->treeitem);
+
+        }else
+        {
+            TreeItem *parentitem = (TreeItem*)  (itemlist[0]).internalPointer();
+            if( !parentitem->m_folder )
+            {
+                 parentitem = parentitem->parent();
+            }
+            if(parentitem==NULL)
+            {
+                mFolder *folder = Task->Directories;
+                f = new mFile(Task,folder,file);
+                folder->file_list.append(f);
+                folder->addSize(f->fsize);
+                ui->CopyFileTree->m_model->addTopLevelItem(f->treeitem);
+            }
+            else
+            {
+                mFolder *folder = parentitem->m_folder;
+                f = new mFile(Task,folder,file);
+                ui->CopyFileTree->m_model->setBeginInsertRows(parentitem,folder->subfolder_list.count());
+                folder->file_list.insert(0,f);
+                folder->addSize( f->fsize);
+                ui->CopyFileTree->m_model->setEndInsertRows();
+            }
+        }
+        double sizet = file.size();
+        if ( sizet > 0 )
+        {
+            f->fsize = sizet;
+            Task->SetTotalSize( sizet );
+        }
+        Task->SetFileCount( 1 );
+    }
+    UpdateSearchfiles();
+}
+
+void CopyInfoPanel::on_BtAddFolder_clicked()
+{
+    QModelIndexList itemlist = ui->CopyFileTree->treeWidget->selectionModel()->selectedRows();
+    if(itemlist.count() > 1)
+    {
+        QMessageBox::information(this,tr("Select one item"),tr("Select only one item or none"));
+        return;
+    }
+
+    //Get the folder
+    QMessageBox question(this);
+    question.setWindowTitle(tr("Add folder"));
+    question.setText(tr("Do you want to create a new folder or choose an existing one?"));
+    question.setStandardButtons(QMessageBox::Yes|QMessageBox::No|QMessageBox::Cancel);
+    question.setButtonText(QMessageBox::Yes,tr("New Folder"));
+    question.setButtonText(QMessageBox::No,tr("Existing folder"));
+
+    QStringList folders;
+    bool existing = false;
+    //Create a new folder
+    int ans = question.exec();
+    if(ans==QMessageBox::Yes)
+    {
+        QInputDialog input(this);
+        input.setLabelText(tr("Set the name of the new folder"));
+        if(input.exec())
+        {
+            folders.append(input.textValue());
+        }
+        else
+            return;
+    }else if(ans==QMessageBox::No)//Choose existing folder
+    {
+        QFileDialog filedialog(this);
+        filedialog.setWindowTitle(tr("choose directories"));
+        filedialog.setFileMode(QFileDialog::Directory);
+        filedialog.setOption(QFileDialog::ShowDirsOnly,true);
+        if( filedialog.exec() )
+        {
+            folders = filedialog.selectedFiles();
+        }else
+            return;
+
+        existing = true;
+    }else
+        return;
+
+    for(int i=0;i < folders.count();i++)
+    {
+        //Create new folder
+        mFolder *subfolder;
+
+        if(itemlist.count() == 0)
+        {
+            //Add to top level
+            subfolder = new mFolder(Task,Task->Directories,QFileInfo(folders[i]));
+            subfolder->parent_folder->subfolder_list.append(subfolder);
+            ui->CopyFileTree->top_items.append(subfolder->treeitem);
+            ui->CopyFileTree->m_model->addTopLevelItem(subfolder->treeitem);
+        }else
+        {
+            //Get parent
+            TreeItem *parentitem = (TreeItem*) itemlist[0].internalPointer();
+
+            if( !parentitem->m_folder )
+            {
+                 parentitem = parentitem->parent();
+            }
+
+            if(parentitem==NULL)
+            {
+                //Add to top level
+                subfolder = new mFolder(Task,Task->Directories,QFileInfo(folders[i]));
+                subfolder->parent_folder->subfolder_list.append(subfolder);
+                ui->CopyFileTree->top_items.append(subfolder->treeitem);
+                ui->CopyFileTree->m_model->addTopLevelItem(subfolder->treeitem);
+            }
+            else
+            {
+                //Add to existing folder in the tree
+
+                ui->CopyFileTree->m_model->setBeginInsertRows(parentitem,parentitem->childCount());
+
+                subfolder = new mFolder(Task,parentitem->m_folder,QFileInfo(folders[i]));
+                subfolder->parent_folder->subfolder_list.insert(0,subfolder);
+
+                ui->CopyFileTree->m_model->setEndInsertRows();
+            }
+        }
+        //If the folder exists in the  filesystem traverse files and subfolders
+        if(existing)
+        {
+            subfolder->Traverse(Task,folders[i]+tr("/"));
+        }
+    }
+    UpdateSearchfiles();
+}
+
+
+void CopyInfoPanel::on_editWidget_clicked(bool checked)
+{
+    if(checked && Task->PrepareDone)
+    {
+        if(!Task->IsPaused() && Task->Started)
+            on_BtStart_clicked();
+    }else
+        ui->editWidget->setChecked(false);
+}
+
+void CopyInfoPanel::on_BtStart_customContextMenuRequested(QPoint pos)
+{
+    //TODO
+}

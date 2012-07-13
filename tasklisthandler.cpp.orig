@@ -1,0 +1,259 @@
+#include "tasklisthandler.h"
+#include <QtNetwork/QHostAddress>
+#include <windows.h>
+#include <ncsettings.h>
+TaskListHandler::TaskListHandler()
+{
+}
+
+TaskThread* TaskListHandler::RemoveFromList(QList<void*> &list, TaskThread *thread,int mode )
+{
+    int i = 0, count = list.count();
+    TaskOpList *th = NULL;
+    while( i < count)
+    {
+        th = (TaskOpList*) list[i];
+        if( mode == ALWAYS_ENQUEUE )
+        {
+            if( !th->thList.contains( thread ) )
+                return NULL;
+            th->thList.removeOne( thread );
+            break;
+        }
+        /*Only Enqeueu if source and destination are the same*/
+        if( mode == CHECK_BOTH && (th->destvolume == thread->DestVolume || th->sourcevolume == thread->SourceVolume
+                                || th->sourcevolume == thread->DestVolume || th->destvolume == thread->SourceVolume))
+        {
+            if( !th->thList.contains( thread ) )
+                return NULL;
+            th->thList.removeOne( thread );
+            break;
+        }
+        /*Only Enqeueu if destination is the same*/
+        if( mode == CHECK_DEST && (th->destvolume == thread->DestVolume || th->destvolume == thread->SourceVolume))
+        {
+            if( !th->thList.contains( thread ) )
+                return NULL;
+            th->thList.removeOne( thread );
+            break;
+        }
+        /*Only Enqeueu if source is the same*/
+        if( mode == CHECK_SOURCE && (th->sourcevolume == thread->SourceVolume || th->sourcevolume == thread->DestVolume ))
+        {
+            if( !th->thList.contains( thread ) )
+                return NULL;
+            th->thList.removeOne( thread );
+            break;
+        }
+        i++;
+    }
+
+    if( th != NULL && th->thList.count() == 0 )
+    {
+        list.removeOne( th );
+        delete th;
+        return NULL;
+    }
+
+    if( th != NULL && th->thList.count() > 0 )
+        return (TaskThread*)th->thList[0];
+
+     return NULL;
+}
+
+TaskThread* TaskListHandler::Remove( TaskThread *thread )//return next task
+{
+
+    int type = thread->GetCpType();
+    switch( type )
+    {
+        case LOCAL_NETWORK:
+            return RemoveFromList( LocalNetwork, thread, ALWAYS_ENQUEUE );
+        break;
+        case FROM_INET:
+            return RemoveFromList( FromINet, thread, CHECK_SOURCE );
+        break;
+        case TO_INET:
+            return RemoveFromList( ToINet, thread, ALWAYS_ENQUEUE );
+        break;
+        case DISK_TO_DISK:
+            return RemoveFromList( DiskToDisk, thread, CHECK_BOTH );
+        break;
+        case FROM_CDDVD:
+            return RemoveFromList( FromCDDVD, thread, CHECK_SOURCE);
+        case -1:
+        {
+            return RemoveFromList( OtherMedia, thread, CHECK_SOURCE );
+        }
+    }
+    return NULL;
+}
+
+
+void TaskListHandler::AThreadTerminated( TaskThread *thread )
+{
+    TaskThread *next = Remove( thread );
+    if( next!=NULL && !next->Started)
+    {
+        next->start();
+    }
+}
+
+
+int TaskListHandler::GetOperationType(QString source, QString dest)
+{
+    QHostAddress address;
+
+    if( dest.startsWith(tr("//")) && address.setAddress( dest.afterLast('/') ) )
+    {
+        QString IpAdress = address.toString();
+
+        QString ip_part = IpAdress.beforeFirst('.');
+        QString ip_part2 = IpAdress.afterFirst('.');
+        ip_part2 = ip_part2.beforeFirst('.');
+        if( ip_part == tr("192") && ip_part2 == tr("168") )
+            return LOCAL_NETWORK;
+        else
+            return TO_INET;
+
+        return LOCAL_NETWORK;
+    }
+
+    if( source.startsWith(tr("//")) && address.setAddress( source.afterLast('/') ) )
+    {
+        QString IpAdress = address.toString();
+
+        QString ip_part = IpAdress.beforeFirst('.');
+        QString ip_part2 = IpAdress.afterFirst('.');
+        ip_part2 = ip_part2.beforeFirst('.');
+        if( ip_part == tr("192") && ip_part2 == tr("168") )
+            return LOCAL_NETWORK;
+        else
+            return FROM_INET;
+
+        return LOCAL_NETWORK;
+    }
+
+    if(GetDriveTypeA(source.toAscii()) == DRIVE_REMOTE)
+        return FROM_INET;
+    if(GetDriveTypeA(dest.toAscii()) == DRIVE_REMOTE)
+        return TO_INET;
+
+
+    if( !dest.startsWith(tr("//")) && !source.startsWith(tr("//")))
+    {
+        int volume = GetDriveTypeA(source.toAscii());
+        if( volume == DRIVE_CDROM  )
+            return FROM_CDDVD;
+        return DISK_TO_DISK;
+    }
+    return -1;
+}
+
+
+bool TaskListHandler::AddToList(QList<void*> &list, TaskThread *thread,int mode )
+{
+        bool queue_exist = false;
+        int i = 0, count = list.count();
+        while( i < count)
+        {
+            TaskOpList *th = (TaskOpList*) list[i];
+            if( mode == ALWAYS_ENQUEUE )
+            {
+                th->thList.append( thread );
+                queue_exist = true;
+                break;
+            }
+            if( mode == CHECK_BOTH && (th->destvolume == thread->DestVolume || th->sourcevolume == thread->SourceVolume
+                                || th->sourcevolume == thread->DestVolume || th->destvolume == thread->SourceVolume))
+            {
+                th->thList.append( thread );
+                queue_exist = true;
+                break;
+            }
+            if( mode == CHECK_DEST && (th->destvolume == thread->DestVolume || th->destvolume == thread->SourceVolume))
+            {
+                th->thList.append( thread );
+                queue_exist = true;
+                break;
+            }
+            if( mode == CHECK_SOURCE && (th->sourcevolume == thread->SourceVolume || th->sourcevolume == thread->DestVolume ))
+            {
+                th->thList.append( thread );
+                queue_exist = true;
+                break;
+            }
+            i++;
+        }
+        if( !queue_exist )
+        {
+            TaskOpList *th = new TaskOpList;
+            th->destvolume = thread->DestVolume;
+            th->sourcevolume = thread->SourceVolume;
+            list.append( th );
+            th->thList.append( thread );
+            return true;
+        }
+        return false;
+}
+
+bool TaskListHandler::Add( TaskThread *thread )
+{
+    QString source = thread->SourceVolume;
+    QString dest = thread->DestVolume;
+
+    int type = thread->GetCpType();
+    if( type == -1 )
+    {
+        type = GetOperationType( source, dest );
+        thread->SetCopyType( type );
+    }
+
+    bool start = false;
+    switch( type )
+    {
+        case LOCAL_NETWORK:
+            if( AddToList( LocalNetwork, thread, ALWAYS_ENQUEUE ) )
+            {
+                start = true;
+            }
+        break;
+        case FROM_INET:
+            if( AddToList( FromINet, thread, CHECK_SOURCE ) )
+            {
+                start = true;
+            }
+        break;
+        case TO_INET:
+            if( AddToList( ToINet, thread,  CHECK_DEST))
+            {
+                start = true;
+            }
+        break;
+        case DISK_TO_DISK:
+            if( AddToList( DiskToDisk, thread, CHECK_BOTH ) )
+            {
+                start = true;
+            }
+        break;
+        case FROM_CDDVD:
+            if( AddToList( FromCDDVD, thread, CHECK_SOURCE ) )
+            {
+                start = true;
+            }
+        case -1:
+        {
+            if( AddToList( OtherMedia, thread, CHECK_BOTH ) )
+            {
+                start = true;
+            }
+        }
+    }
+
+    if(start && ncsettings::StartOnCreate() && !thread->was_paused )
+    {
+        thread->start();
+        return true;
+    }
+    return false;
+}
