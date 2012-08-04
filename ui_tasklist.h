@@ -1,8 +1,8 @@
 /********************************************************************************
 ** Form generated from reading UI file 'tasklist.ui'
 **
-** Created: Fri 13. Jul 16:05:30 2012
-**      by: Qt User Interface Compiler version 4.7.0
+** Created: Sat 4. Aug 21:12:18 2012
+**      by: Qt User Interface Compiler version 4.8.0
 **
 ** WARNING! All changes made in this file will be lost when recompiling UI file!
 ********************************************************************************/
@@ -33,7 +33,7 @@ public:
     {
         if (TaskList->objectName().isEmpty())
             TaskList->setObjectName(QString::fromUtf8("TaskList"));
-        TaskList->resize(71, 71);
+        TaskList->resize(109, 109);
         QSizePolicy sizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
         sizePolicy.setHorizontalStretch(0);
         sizePolicy.setVerticalStretch(0);
@@ -48,6 +48,8 @@ public:
         sizePolicy.setHeightForWidth(scrollArea->sizePolicy().hasHeightForWidth());
         scrollArea->setSizePolicy(sizePolicy);
         scrollArea->setFrameShape(QFrame::NoFrame);
+        scrollArea->setFrameShadow(QFrame::Plain);
+        scrollArea->setLineWidth(0);
         scrollArea->setWidgetResizable(true);
         scrollAreaWidgetContents = new QWidget();
         scrollAreaWidgetContents->setObjectName(QString::fromUtf8("scrollAreaWidgetContents"));

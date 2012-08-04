@@ -131,7 +131,7 @@ class TaskThread : public QThread
         void setCheckMd5(bool enable);
 
         CopyState getCurrentState();
-    private:
+private:
 
         friend class TaskCopyQueue;
         CopyOperation copyOperationType;
@@ -202,6 +202,7 @@ class TaskThread : public QThread
         void deleteSource();
         void deleteDestination();
         int loadFromXML( QIODevice &xml_device, bool no_save = false );
+        QString getRealTargetPath(QString target);
 
     signals:
         void starting();

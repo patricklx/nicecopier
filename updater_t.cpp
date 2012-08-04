@@ -9,6 +9,8 @@
 #include <QDesktopServices>
 #include <QDate>
 #include <QLocale>
+#include <QDebug>
+#include <QApplication>
 
 #include "ncsettings.h"
 #include <QFile>
@@ -59,6 +61,7 @@ void Updater::check_version()
         return;
     }
 
+
     QDate buildDate = QLocale(QLocale::C).toDate(QString(__DATE__).simplified(), QLatin1String("MMM d yyyy"));
     QString act_version = buildDate.toString("yy.MM.dd");
     qDebug("'%s'",act_version.toAscii().data());
@@ -97,7 +100,7 @@ void Updater::showProgress()
     }
 
     //connect(reply,SIGNAL(finished()),&progressDlg,SLOT(accept()));
-    connect(reply,SIGNAL(finished()),this,SLOT(downloaded()));
+    connect(reply,SIGNAL(finished()),this,SLOT(downloadFinished()));
 
     connect(reply,SIGNAL(downloadProgress(qint64,qint64)),this,SLOT(setProgress(qint64,qint64)));
     connect(&progressDlg,SIGNAL(canceled()),this,SLOT(cancel()));
@@ -135,22 +138,44 @@ void Updater::getRedirect()
     connect(reply,SIGNAL(finished()),this,SLOT(getRedirect()));
 }
 
+void Updater::startDownload()
+{
+    //get download url
+    QUrl url = QUrl("http://appdriverupdate.sourceforge.net/Files/Updates/NiceCopier.txt");
+    reply = qnam.get(QNetworkRequest(url));
+    connect(reply,SIGNAL(finished()),this,SLOT(download()));
+}
+
 void Updater::download()
 {
-    QString link;
-    link = "http://sourceforge.net/projects/nicecopier/files/NiceCopier/NiceCopierSetup_{ver}.exe/download";
+    QString html = reply->readAll();
+    reply->deleteLater();
+    reply = NULL;
+
+    QString regexStr="Link< ([^ ]*) >";
     if(QSysInfo::WordSize == 64)
-        link = "http://sourceforge.net/projects/nicecopier/files/NiceCopier/NiceCopierSetup64_{ver}.exe/download";
-    link.replace("{ver}",latest_version);
-    qDebug(link.toAscii());
+        regexStr = "Link64< ([^ ]*) >";
+
+    QRegExp regex(regexStr);
+    regex.setMinimal(true);
+
+    regex.indexIn(html);
+    QString link = regex.cap(1);
+
+    if(link.isEmpty())
+    {
+        qDebug("no url link found: %s",regex.errorString().toAscii().data());
+        return;
+    }
+    qDebug() << "link:"<<link;
+
     QUrl url = QUrl(link);
     reply = qnam.get(QNetworkRequest(url));
 
     connect(reply,SIGNAL(finished()),this,SLOT(getRedirect()));
-
 }
 
-void Updater::downloaded()
+void Updater::downloadFinished()
 {
     qDebug("downloaded");
 
@@ -177,6 +202,8 @@ void Updater::downloaded()
 
     args << "/c" << "start" << """" << launchCommand;
     proc.startDetached("cmd",args);
+    proc.waitForStarted();
+    QApplication::exit();
 
 }
 
@@ -211,7 +238,7 @@ void Updater::setProgress(qint64 recieved, qint64 total)
 
     int time = timer.elapsed();
 
-    QString speed = Util::toReadableSize(recieved/time*1000);
+    QString speed = Util::toReadableSpeed(recieved/time*1000);
     QString done = Util::toReadableSize(recieved);
     QString size = Util::toReadableSize(total);
 

@@ -98,6 +98,8 @@ class TreeModel : public QAbstractItemModel
 
         void updateItem(TreeItem *item);
 
+        void sort(int column, Qt::SortOrder order);
+
 
         QModelIndex getItemIndex(TreeItem *item)
         {

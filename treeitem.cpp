@@ -512,6 +512,41 @@ void TreeModel::updateItem(TreeItem *item)
     dataChanged(startindex,endindex);
 }
 
+int sortColumn = COL_NAME;
+Qt::SortOrder sortOrder = Qt::AscendingOrder;
+bool sortFunction(TreeItem *i1,TreeItem *i2)
+{
+    switch(sortColumn)
+    {
+        case COL_NAME:
+        case COL_PATH:
+        case COL_EXISTS:
+        case COL_RETRY:
+        case COL_CHECKSUM_STAT:
+            return i1->data(sortColumn).toString() < i2->data(sortColumn).toString();
+        break;
+        case COL_SIZE:
+        {
+            File *f1 = (File*)i1->getFile();
+            File *f2 = (File*)i2->getFile();
+
+            if( f1 && f2 ){
+
+                return (f1->getSize() < f2->getSize());
+            }
+        }
+        break;
+    }
+    return false;
+}
+
+void TreeModel::sort(int column, Qt::SortOrder order)
+{
+    sortColumn = column;
+    sortOrder = order;
+    //qSort(topLevelItems.begin(),topLevelItems.end(),sortFunction);
+}
+
 
 bool TreeModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {

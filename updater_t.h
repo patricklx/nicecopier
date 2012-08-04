@@ -20,13 +20,13 @@ class Updater:public QObject
         QFile *niceCopierSetup_File;
     public:
         Updater();
-        void download();
+
 
     signals:
         void newerVersionAvailable();
 
     private slots:
-        void downloaded();
+        void downloadFinished();
         void check_version();
         void setProgress(qint64 recieved,qint64 total);
         void cancel();
@@ -35,6 +35,8 @@ class Updater:public QObject
 
     public slots:
         void check(bool inform_user=false);
+        void startDownload();
+        void download();
 
 
 };

@@ -125,6 +125,8 @@ QString getIP4AdressByName(QString address_name)
 
 TaskListHandler::CopyType TaskListHandler::getOperationType(QStringExt source, QStringExt dest)
 {
+    qDebug()<<dest;
+    qDebug()<<source;
     if( dest.startsWith("//") )
     {
         QStringExt IpAdress = getIP4AdressByName(dest.afterFirst("//"));
@@ -236,39 +238,44 @@ bool TaskListHandler::add( TaskThread *thread )
     {
         case LOCAL_NETWORK:
             if( addToList( LocalNetwork, thread, ALWAYS_ENQUEUE ) )
-            {
                 start = true;
-            }
+            qDebug() << "LOCAL_NETWORK";
+
         break;
         case FROM_INET:
             if( addToList( FromINet, thread, CHECK_SOURCE ) )
             {
                 start = true;
             }
+            qDebug() << "FROM_INET";
         break;
         case TO_INET:
             if( addToList( ToINet, thread,  CHECK_DEST))
             {
                 start = true;
             }
+            qDebug() << "TO_INET";
         break;
         case DISK_TO_DISK:
             if( addToList( DiskToDisk, thread, CHECK_BOTH ) )
             {
                 start = true;
             }
+            qDebug() << "DISK_TO_DISK";
         break;
         case FROM_CDDVD:
             if( addToList( FromCDDVD, thread, CHECK_SOURCE ) )
             {
                 start = true;
             }
+            qDebug() << "FROM_CDDVD";
         case UNKNOWN:
         {
             if( addToList( OtherMedia, thread, CHECK_BOTH ) )
             {
                 start = true;
             }
+            qDebug() << "UNKNOWN";
         }
     }
 

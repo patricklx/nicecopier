@@ -28,6 +28,9 @@ FileListWidget::FileListWidget(QWidget *parent) :
     ui(new Ui::FileList)
 {
     ui->setupUi(this);
+
+    //ui->treeWidget->setSortingEnabled(true);
+
     QMenu *lineEditMenu = new QMenu(ui->searchInput);
     ui->searchInput->setButtonMenu(FancyLineEdit::Left, lineEditMenu);
     ui->searchInput->setButtonVisible(FancyLineEdit::Left, true);

@@ -21,7 +21,7 @@
 #include <windows.h>
 #include <io.h>
 #define MAX_SIZE  4 * 1024 * 1024
-#define MIN_SIZE  64*1024
+#define MIN_SIZE  32*1024
 
 
 int interval_pause=0;
@@ -206,10 +206,19 @@ bool File::verifyChecksum()
     }
 
     qint16 checkSum = 0;
+    size_t bfSize = this->buffersize;
     QByteArray array;
+
     while(!destFile.atEnd())
     {
-        array = destFile.read(4*1024*1024);
+        QTime watch;
+        watch.start();
+        array = destFile.read(bfSize);
+        int time = watch.elapsed();
+
+        if(!destFile.atEnd())
+            bfSize = this->computeBufferSize(time);
+
         checkSum = myChecksum(array,array.length(),~checkSum);
 
         copyThreadInfo->addSizeDone(array.length());
@@ -404,7 +413,7 @@ bool File::rename(QStringExt new_name)
     return true;
 }
 
-size_t File::computeBfSize(int time)
+size_t File::computeBufferSize(int time)
 {
     double p = 0;
 
@@ -755,14 +764,19 @@ bool File::copyFile(QFile *fSource, QFile *fDest)
             return false;
         }
 
+        readtime.pause();
+
         this->sourceCheckSum = myChecksum(buffer,readbyte,~this->sourceCheckSum);
 
 
         writetime.start();
         qint64 writebit = fDest->write(buffer,readbyte);
 
-        if( copyThreadInfo->getCopyType() == TaskListHandler::LOCAL_NETWORK || copyThreadInfo->getCopyType() == TaskListHandler::FROM_INET )
+        if( copyThreadInfo->getCopyType() == TaskListHandler::LOCAL_NETWORK
+                || copyThreadInfo->getCopyType() == TaskListHandler::FROM_INET ){
+
             fDest->flush();
+        }
 
         writetime.pause();
 
@@ -780,9 +794,13 @@ bool File::copyFile(QFile *fSource, QFile *fDest)
         if( time < readtime.time())
             time = readtime.time();
 
-        if(!fSource->atEnd())
+        if(writetime.time()<=1 || readtime.time()<=1 ){
+            time = 0;
+        }
+
+        if(!fSource->atEnd() && time!=0 )
         {
-            size_t bfsize = computeBfSize(time);
+            size_t bfsize = computeBufferSize(time);
             if( bfsize > 0)
             {
                 copysize = bfsize;

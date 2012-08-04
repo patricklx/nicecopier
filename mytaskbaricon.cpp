@@ -8,6 +8,7 @@
 #include "RecentTasks.h"
 #include "tasks_dialog_t.h"
 
+
 MyTaskBarIcon::MyTaskBarIcon(QWidget *_parent)
     :QSystemTrayIcon(QIcon(":/icons/Copy2.ico"),_parent)
 {
@@ -162,7 +163,7 @@ void MyTaskBarIcon::askDownload()
 {
     if(lastMessage == "A newer version of NiceCopier is available.")
     {
-        int ans = QMessageBox::question(NULL,"Update","Update NiceCopier now?",QMessageBox::Yes|QMessageBox::No);
+        int ans = QMessageBox::question(parent,"Update","Update NiceCopier now?",QMessageBox::Yes|QMessageBox::No);
         if(ans==QMessageBox::Yes)
         {
             emit getUpdate();

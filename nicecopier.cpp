@@ -59,7 +59,7 @@ NiceCopier::NiceCopier(QWidget *parent) :
     QTimer::singleShot(1000,this,SLOT(startTasks()));
 
     connect(&updater,SIGNAL(newerVersionAvailable()),taskbar,SLOT(newVersionAvailable()));
-    connect(taskbar,SIGNAL(getUpdate()),&updater,SLOT(downloaded()));
+    connect(taskbar,SIGNAL(getUpdate()),&updater,SLOT(startDownload()));
     update();
 }
 
@@ -200,9 +200,15 @@ void NiceCopier::removeTask( CopyInfoPanel *panel )
 
 void NiceCopier::expandTask(CopyInfoPanel *panel)
 {
-    Qt::WindowFlags flags = Qt::WindowStaysOnTopHint|Qt::WindowSystemMenuHint|Qt::CustomizeWindowHint;
+    Qt::WindowFlags flags = Qt::WindowStaysOnTopHint|
+                            Qt::WindowSystemMenuHint|
+                            Qt::CustomizeWindowHint|
+                            Qt::Dialog|
+                            Qt::WindowMinimizeButtonHint|
+                            Qt::WindowMaximizeButtonHint|
+                            Qt::WindowCloseButtonHint;
     ui->tasklist->removeTask(panel);
-    panel->setParent(NULL,flags|Qt::Dialog|Qt::WindowMinimizeButtonHint|Qt::WindowCloseButtonHint);
+    panel->setParent(NULL,flags);
     panel->show();
     panel->setWindowTitle("NiceCopier Task");
     panel->move(NcSettings::screenCenter()-panel->rect().bottomRight()/2);

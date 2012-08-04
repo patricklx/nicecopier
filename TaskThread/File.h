@@ -108,7 +108,7 @@ class File
         double fsize;
         double targetSize;
         double copiedSize;
-        size_t computeBfSize(int time);
+        size_t computeBufferSize(int time);
         size_t averageSpeed;
 
         qint16 sourceCheckSum;

@@ -3,6 +3,7 @@
 #include <QMessageBox>
 #include <QFileInfoList>
 #include <QFileInfo>
+#include <QDebug>
 #include "taskthread.h"
 #include <windows.h>
 #include "ReadableSize.h"
@@ -16,23 +17,18 @@ Folder::Folder(TaskThread *thread,Folder *parent, QFileInfo folderinfo,bool chec
 
 Folder::Folder(TaskThread *copyinfo, QFileInfo source, QFileInfo destination)
 {
+    qDebug()<<source.path();
+    qDebug()<<destination.path();
     initialize(copyinfo,NULL,source);
     destPath = QStringExt(destination.path()).toUtf8();
     QStringExt destinationPath = QStringExt(destination.path());
 
     QStringList list = QString(sourcePath).split('/');
 
-    /*if(list.last().isEmpty()){
-        list.removeLast();
-    }*/
-
     sourceName = list.takeLast().toAscii();
     sourcePath = QString(list.isEmpty()?(""):list.join("/")+"/").toAscii();
 
     list = QString(destPath).split('/');
-    /*if(list.last().isEmpty()){
-        list.removeLast();
-    }*/
 
     destName = list.takeLast().toAscii();
     destPath = QString(list.isEmpty()?"":list.join("/")+"/").toAscii();
@@ -106,6 +102,10 @@ void Folder::initialize(TaskThread *copyinfo, Folder *parent, QFileInfo folderin
             destExist = true;
         }
     }
+
+    qDebug()<<"sourceName: "<<sourceName;
+    qDebug()<<"sourcepath: "<<sourcePath;
+    qDebug()<<"destname: "<<destName;
 }
 
 void Folder::replace(bool replace)
@@ -393,7 +393,7 @@ bool Folder::deleteSource()
 
         QDir dir(fname);
         dir.refresh();
-        QFileInfoList list = dir.entryInfoList(QDir::NoDotAndDotDot|QDir::AllEntries|QDir::Hidden,QDir::Name);
+        QFileInfoList list = dir.entryInfoList(QDir::NoDotAndDotDot|QDir::AllEntries|QDir::Hidden|QDir::System,QDir::Name);
 
         if(!dir.exists() || list.count()>0)
         {
@@ -444,7 +444,7 @@ bool Folder::deleteDestination()
 
         QDir dir(fname);
         dir.refresh();
-        QFileInfoList list = dir.entryInfoList(QDir::NoDotAndDotDot|QDir::AllEntries|QDir::Hidden,QDir::Name);
+        QFileInfoList list = dir.entryInfoList(QDir::NoDotAndDotDot|QDir::AllEntries|QDir::Hidden|QDir::System,QDir::Name);
 
         if(!dir.exists() || list.count()>0)
         {
@@ -597,8 +597,9 @@ void Folder::traverse(QString path)
     QFileInfoList list;
     while(1)
     {
-        list = dir.entryInfoList(QDir::NoDotAndDotDot|QDir::AllEntries|QDir::Hidden|QDir::System,QDir::Name);
-        if(list.isEmpty() && !dir.isReadable())
+        //include "./" and "../" to check if the folder can be accessed or is just empty
+        list = dir.entryInfoList(QDir::AllEntries|QDir::Hidden|QDir::System,QDir::Name);
+        if( list.isEmpty() )
         {
             int ans;
             copyThreadInfo->sendMessage(QString("Can't open folder \"") + path + QString("\"\n Retry?"),
@@ -620,17 +621,28 @@ void Folder::traverse(QString path)
         }else break;
     }
 
+    list = dir.entryInfoList(QDir::NoDotAndDotDot|QDir::AllEntries|QDir::Hidden|QDir::System,QDir::Name);
+
     fileList.reserve(list.count());
     for( int i = 0;i < list.count(); i++)
     {
         if(copyThreadInfo->testDestroy())
             break;
         QFileInfo finfo = list[i];
+
+        if(finfo.path().contains("/../") || finfo.path().contains("/./") ){
+            continue;
+        }
+        if(finfo.path().contains("./")){
+            qDebug()<<finfo.path();
+        }
+
         if(finfo.isFile() || finfo.isSymLink())
         {
             addFile(finfo);
             continue;
         }
+
         if(finfo.isDir())
         {
             addFolder(finfo);

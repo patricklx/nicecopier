@@ -21,27 +21,6 @@
 #include "TaskThread/ReadableSize.h"
 #include "extensions/qstringext.h"
 
-
-/*some memory locking, only in the startup*/
-/*
-memory_t memory;
-
-
-void* operator new[] (std::size_t size) throw (std::bad_alloc){return memory.operator_new(size);}
-
-void* operator new[] (std::size_t size, const std::nothrow_t& nothrow_constant) throw(){return memory.operator_new(size);}
-
-void* operator new (std::size_t size) throw (std::bad_alloc){return memory.operator_new(size);}
-
-void* operator new (std::size_t size, const std::nothrow_t& nothrow_constant) throw(){return memory.operator_new(size);}
-
-
-
-void operator delete (void* ptr) throw (){memory.operator_delete(ptr);}
-void operator delete (void* ptr, const std::nothrow_t& nothrow_constant) throw(){memory.operator_delete(ptr);}
-void operator delete[] (void* ptr) throw (){memory.operator_delete(ptr);}
-void operator delete[] (void* ptr, const std::nothrow_t& nothrow_constant) throw(){memory.operator_delete(ptr);}
-*/
 #if defined(QT_NO_DEBUG)
 Q_IMPORT_PLUGIN(qico)
 #endif
@@ -75,9 +54,8 @@ void myMessageHandler(QtMsgType type, const char *msg)
 int main(int argc,char **argv)
 {
     QDir::setCurrent(QStringExt(argv[0]).beforeLast('\\'));
-    qDebug("starting");
+
     QApplication *a = new QApplication(argc, argv);
-   //qDebug("QApplication - pointers: %d",memory.pointers);
     QStringList cmdline_args = a->arguments();
     if( cmdline_args.contains("debug") )
     {
@@ -115,55 +93,6 @@ int main(int argc,char **argv)
     {
         writeAttribute(qualifiedName,value.toString());
     }
-
-changes made to qstring.h:
-
-    QString afterLast(QChar word)
-    {
-        int index = lastIndexOf(word)+1;
-        return right(size()-index);
-    }
-
-    QString afterLast(QString word)
-    {
-        int index = lastIndexOf(word)+word.length();
-        return right(size()-index);
-    }
-
-    QString beforeLast(QChar word)
-    {
-        int index = lastIndexOf(word);
-        return left(index);
-    }
-
-    QString beforeLast(QString word)
-    {
-        int index = lastIndexOf(word);
-        return left(index);
-    }
-
-    QString afterFirst(QString word)
-    {
-        int index = indexOf(word)+word.length();
-        return right(size()-index);
-    }
-    QString afterFirst(QChar word)
-    {
-        int index = indexOf(word)+1;
-        return right(size()-index);
-    }
-
-    QString beforeFirst(QString word)
-    {
-        int index = indexOf(word);
-        return left(index);
-    }
-    QString beforeFirst(QChar word)
-    {
-        int index = indexOf(word);
-        return left(index);
-    }
-
 qlocalserver_win.cpp
 bool QLocalServerPrivate::addListener()
 {
@@ -207,3 +136,4 @@ bool QLocalServerPrivate::addListener()
                  3000,                     // client time-out
                  &secAtt);
 */
+

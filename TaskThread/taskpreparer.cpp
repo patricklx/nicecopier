@@ -66,7 +66,7 @@ bool TaskPreparer::prepareCopy()
             file.setFile(path);
         }
 
-        qDebug()<<path;
+        qDebug()<<"add: "<<path;
 
         if ( file.exists() )
         {

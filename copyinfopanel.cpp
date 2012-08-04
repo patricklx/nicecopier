@@ -133,7 +133,7 @@ void CopyInfoPanel::expand()
     layout();
     adjustSize();
     this->setMinimumSize(this->minimumSize().width(),size().height());
-    expand(this);
+    emit expand(this);
 }
 
 void CopyInfoPanel::contract()
@@ -147,7 +147,8 @@ void CopyInfoPanel::contract()
     adjustSize();
     this->setMaximumSize(this->minimumWidth(),size().height());
     this->setMinimumSize(this->minimumWidth(),size().height());
-    contract(this);
+
+    emit contract(this);
 }
 
 void CopyInfoPanel::resizeEvent(QResizeEvent *q)
@@ -718,8 +719,11 @@ QString CopyInfoPanel::getSourceListMsg()
     for(int i=0;i<5 && i<sourceList.count();i++)
     {
         QStringExt source = sourceList[i].afterLast('/');
+        qDebug()<<sourceList[i];
         if(source.isEmpty())
             source = sourceList[i].beforeLast('/').afterLast('/')+QStringExt('/');
+        qDebug()<<sourceList[i].beforeLast('/');
+        qDebug()<<source;
         msg = msg + "\n" + source;
     }
     if(sourceList.count()>5)
@@ -919,7 +923,7 @@ void CopyInfoPanel::updateSpeed( int time )
         average_speed = ( average_speed + intermed_speed ) / 2;
     else
         average_speed = intermed_speed;
-    QString speed = Util::toReadableSize( average_speed );
+    QString speed = Util::toReadableSpeed( average_speed );
 
     ui->speedLabel->setText(speed);
     intermed_size = task->getTotalCopiedSize();

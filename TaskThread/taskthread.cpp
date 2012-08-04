@@ -1,6 +1,5 @@
 
 
-#include <windows.h>
 #include "taskthread.h"
 #include <QFileInfo>
 #include <QMessageBox>
@@ -10,12 +9,14 @@
 #include <QTextStream>
 #include <QString>
 #include <QDir>
+#include<QSettings>
 
 #include <stdio.h>
 #include "tasklisthandler.h"
 
 #include <windows.h>
 #include <commctrl.h>
+
 
 
 TaskThread::~TaskThread()
@@ -93,7 +94,10 @@ TaskThread::TaskThread( QIODevice &device, bool no_save  )
                 sourcePath = f.path();
             }
             destinationPath = d.absoluteFilePath();
+            destinationPath = getRealTargetPath(destinationPath);
         }
+
+
     }
     /*
     paths:
@@ -126,9 +130,11 @@ TaskThread::TaskThread( QIODevice &device, bool no_save  )
     }
 
 
+    qDebug()<<"source path: "<< sourcePath;
     if(sourcePath.startsWith("//"))
     {
-        sourceVolume = sourcePath.afterFirst("//");
+        sourceVolume = sourcePath.afterFirst(QString("//"));
+        qDebug()<<"sourceVolume: "<< sourceVolume;
         sourceVolume = "//" + sourceVolume.beforeFirst('/');
     }else
     {
@@ -136,11 +142,52 @@ TaskThread::TaskThread( QIODevice &device, bool no_save  )
         sourceVolume.append('/');
     }
 
+    qDebug()<<"sourceVolume: "<< sourceVolume;
+
 
     currentSourceDir = sourcePath;
     currentDestDir = destinationPath;
 }
 
+//There are different kind of shortcuts, one is the "Folder shortcut"
+//http://en.wikipedia.org/wiki/Symbolic_link#Folder_Shortcuts.5B11.5D
+//to test if this is one we need to check the folder properties and
+//the dekstop.ini file
+QString TaskThread::getRealTargetPath(QString target)
+{
+    DWORD attr = GetFileAttributes(target.toStdWString().c_str());
+
+    QString folderShortcutID = "{0AFACED1-E828-11D1-9187-B532F1E9575D}";
+
+    qDebug()<<"target: "<<target;
+    qDebug()<<attr;
+    if(attr&FILE_ATTRIBUTE_SYSTEM || attr&&FILE_ATTRIBUTE_READONLY){
+
+        qDebug()<<"is system or read-only";
+        if(!target.endsWith("/")){
+            target+="/";
+        }
+        QString desktopIni = target+"desktop.ini";
+        QSettings settings(desktopIni,QSettings::IniFormat);
+        qDebug()<<settings.allKeys();
+        if( settings.value(".ShellClassInfo/CLSID2") == folderShortcutID ){
+
+            QFileInfo info(target+"target.lnk");
+
+            target = info.symLinkTarget();
+
+            QFileInfo symlink(target);
+            if(symlink.isDir()){
+                target += "/";
+            }
+
+        }
+    }
+
+    qDebug()<<"real target"<<target;
+
+    return target;
+}
 
 bool TaskThread::shouldVerifyChecksum()
 {
@@ -250,10 +297,10 @@ void TaskThread::setCopyType( TaskListHandler::CopyType type )
             fileCopyQueue.setInicialBufferSize( 64 * 1024 );
         break;
         case TaskListHandler::FROM_INET:
-            fileCopyQueue.setInicialBufferSize( 16 * 1024 );
+            fileCopyQueue.setInicialBufferSize( 32 * 1024 );
         break;
         case TaskListHandler::TO_INET:
-            fileCopyQueue.setInicialBufferSize( 16 * 1024 );
+            fileCopyQueue.setInicialBufferSize( 32 * 1024 );
         break;
         case TaskListHandler::DISK_TO_DISK:
             fileCopyQueue.setInicialBufferSize( 1 * 1024 * 1024 );

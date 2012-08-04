@@ -1,8 +1,8 @@
 /********************************************************************************
 ** Form generated from reading UI file 'filelist.ui'
 **
-** Created: Fri 13. Jul 16:05:30 2012
-**      by: Qt User Interface Compiler version 4.7.0
+** Created: Sat 4. Aug 21:12:18 2012
+**      by: Qt User Interface Compiler version 4.8.0
 **
 ** WARNING! All changes made in this file will be lost when recompiling UI file!
 ********************************************************************************/
@@ -129,6 +129,7 @@ public:
         treeWidget->setRootIsDecorated(true);
         treeWidget->setUniformRowHeights(true);
         treeWidget->setItemsExpandable(true);
+        treeWidget->setSortingEnabled(true);
 
         verticalLayout->addWidget(treeWidget);
 

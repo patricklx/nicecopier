@@ -1,8 +1,8 @@
 /********************************************************************************
 ** Form generated from reading UI file 'copyinfopanel.ui'
 **
-** Created: Fri 13. Jul 16:05:30 2012
-**      by: Qt User Interface Compiler version 4.7.0
+** Created: Sat 4. Aug 21:12:18 2012
+**      by: Qt User Interface Compiler version 4.8.0
 **
 ** WARNING! All changes made in this file will be lost when recompiling UI file!
 ********************************************************************************/
@@ -106,10 +106,6 @@ public:
         palette.setBrush(QPalette::Disabled, QPalette::Base, brush);
         palette.setBrush(QPalette::Disabled, QPalette::Window, brush);
         copyInfoPanel->setPalette(palette);
-        copyInfoPanel->setFrameShape(QFrame::NoFrame);
-        copyInfoPanel->setFrameShadow(QFrame::Plain);
-        copyInfoPanel->setLineWidth(0);
-        copyInfoPanel->setMidLineWidth(0);
         verticalLayout = new QVBoxLayout(copyInfoPanel);
         verticalLayout->setSpacing(0);
         verticalLayout->setContentsMargins(0, 0, 0, 0);
@@ -130,7 +126,7 @@ public:
         font.setStyleStrategy(QFont::PreferDefault);
         groupBox->setFont(font);
         groupBox->setContextMenuPolicy(Qt::DefaultContextMenu);
-        groupBox->setAutoFillBackground(false);
+        groupBox->setFlat(false);
         groupBox->setChecked(false);
         verticalLayout_2 = new QVBoxLayout(groupBox);
         verticalLayout_2->setSpacing(0);

@@ -1,5 +1,6 @@
 #include "qstringext.h"
 
+#include <QDebug>
 
 QStringExt QStringExt::afterLast(QChar word)
 {
@@ -9,8 +10,8 @@ QStringExt QStringExt::afterLast(QChar word)
 
 QStringExt QStringExt::afterLast(QString word)
 {
-    int index = lastIndexOf(word)+1;
-    return right(size()-index);
+    int index = lastIndexOf(word);
+    return right(size()-index-word.length());
 }
 
 QStringExt QStringExt::beforeLast(QChar word)
@@ -27,13 +28,15 @@ QStringExt QStringExt::beforeLast(QString word)
 
 QStringExt QStringExt::afterFirst(QString word)
 {
-    int index = indexOf(word)+1;
+    int index = indexOf(word);
+    index = length()-index-word.length();
     return right(index);
 }
 
 QStringExt QStringExt::afterFirst(QChar word)
 {
     int index = indexOf(word)+1;
+    index = length()-index;
     return right(index);
 }
 
