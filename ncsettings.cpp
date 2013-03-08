@@ -9,17 +9,21 @@
 #include <QMessageBox>
 #include <QDesktopWidget>
 #include <QRect>
-#include <Windows.h>
+#include <windows.h>
 #include <QWidget>
 #include <QDialog>
 #include <QColorDialog>
-#include <QPlastiqueStyle>
 #include <QFileDialog>
+#include <QTranslator>
+#include <QApplication>
+
 
 extern "C" BOOL WINAPI CheckTokenMembership(HANDLE, PSID, PBOOL);
+extern Q_CORE_EXPORT int qt_ntfs_permission_lookup;
 
 QSettings* NcSettings::settings = NULL;
 QString NcSettings::defaultStyle = "";
+QTranslator* NcSettings::currentTranslator = NULL;
 
 const struct NcSettings::SettingsVals NcSettings::settingsConsts_str[] = {
     {"TIME_UNTIL_SHOW",2000},
@@ -36,10 +40,13 @@ const struct NcSettings::SettingsVals NcSettings::settingsConsts_str[] = {
     {"MAX_RECENT_TASKS",5},
     {"DEFAULT_ICONS",true},
     {"USE_PLASTIQUE_STYLE",false},
-    {"PB_COLOR",Qt::green},
+    {"PB_COLOR",QColor(Qt::green)},
     {"CHECK_UPDATES",true},
     {"STYLE",""},
-    {"TEST_CHECKSUM",false}
+    {"TEST_CHECKSUM",false},
+    {"LANGUAGE","english"},
+    {"IGNORE_PERMISSIONS",false},
+    {"CUSTOM",false}
 };
 
 
@@ -48,15 +55,19 @@ NcSettings::NcSettings(QWidget *parent) :
     ui(new Ui::ncsettings)
 {
     ui->setupUi(this);
+    show();
     this->adjustSize();
-    this->setMaximumSize(size());
-    this->setMinimumSize(size());
+    this->resize(ui->tabWidget->size());
 
     move(screenCenter() - rect().bottomRight()/2);
+    initUI();
+}
 
+
+void NcSettings::initUI(){
     if(!isRunningAsAdmin())
     {
-        ui->cbadmin->setToolTip("only available as administrator!");
+        ui->cbadmin->setToolTip(tr("only available as administrator!"));
         ui->cbadmin->setDisabled(true);
     }
 
@@ -64,7 +75,7 @@ NcSettings::NcSettings(QWidget *parent) :
 
     if(sys_ver < QSysInfo::WV_VISTA)
     {
-        ui->cbadmin->setToolTip("only available on vista and later!");
+        ui->cbadmin->setToolTip(tr("only available on vista and later!"));
         ui->cbadmin->setDisabled(true);
     }
 
@@ -85,7 +96,10 @@ NcSettings::NcSettings(QWidget *parent) :
     ui->usePlastiqueStyle->setChecked(getValue<bool>(USE_PLASTIQUE_STYLE));
     ui->ckUpdates->setChecked(getValue<bool>(CHECK_UPDATES));
     ui->ckCheckSum->setChecked(getValue<bool>(TEST_CHECKSUM));
+    ui->cb_default_handle->setCurrentIndex(getValue<int>(DEFAULT_EXIST_HANDLE));
+    ui->checkPermissionsCheckBox->setChecked(getValue<bool>(CHECK_PERMISSIONS));
     fillStyleComboBox();
+    fillLangugeComboBox();
 
 
     QPalette palette = ui->progressBar->palette();
@@ -109,7 +123,28 @@ NcSettings::NcSettings(QWidget *parent) :
     }
 }
 
-bool NcSettings::fillStyleComboBox()
+
+void NcSettings::fillLangugeComboBox()
+{
+    QDir dir("languages");
+    QString currentLanguage = this->getValue<QString>(LANGUAGE);
+
+    QStringList filters;
+    filters << "*.qm";
+    QStringList list = dir.entryList(filters,QDir::NoDotAndDotDot|QDir::Files,QDir::Name);
+
+    foreach(QString languge,list){
+
+        ui->langCombobox->addItem(languge);
+        if( languge==currentLanguage ){
+
+            ui->langCombobox->setCurrentIndex(ui->langCombobox->findText(languge));
+        }
+    }
+
+}
+
+void NcSettings::fillStyleComboBox()
 {
     QDir dir("style");
     QString currentStyle = this->getValue<QString>(STYLE);
@@ -211,6 +246,7 @@ bool NcSettings::isShutDown()
 
 void NcSettings::save()
 {
+    NcSettings::settings->remove("CUSTOM");
     NcSettings::settings->sync();
 }
 
@@ -232,6 +268,7 @@ void NcSettings::saveSettings()
     setValue(CONFIRM_DELETE,ui->cb_confirm_delete->isChecked());
     setValue(STYLE,ui->styleComboBox->currentText());
     setValue(TEST_CHECKSUM,ui->ckCheckSum->isChecked());
+    setValue(CHECK_PERMISSIONS,ui->checkPermissionsCheckBox->isChecked());
 
     //reset "run with system"  first
     bool asadmin;
@@ -251,6 +288,12 @@ void NcSettings::saveSettings()
         setValue(POSITION,TOP_LEFT);
     if(ui->cbTopRight->isChecked())
         setValue(POSITION,TOP_RIGHT);
+
+    if(ui->checkPermissionsCheckBox->isChecked()){
+        qt_ntfs_permission_lookup=1;
+    }else{
+        qt_ntfs_permission_lookup=0;
+    }
 }
 
 
@@ -264,9 +307,28 @@ void NcSettings::load()
     NcSettings::settings = new QSettings("ncsettings.ini",QSettings::IniFormat);
     if(getValue<bool>(USE_PLASTIQUE_STYLE))
     {
-	defaultStyle = QApplication::style()->objectName();
-	qDebug(defaultStyle.toAscii());
-	QApplication::setStyle(new QPlastiqueStyle());
+        defaultStyle = QApplication::style()->objectName();
+        qDebug("NcSettings: style: "+defaultStyle.toUtf8());
+        QApplication::setStyle("fusion");
+    }
+
+    QString lang = getValue<QString>(LANGUAGE);
+    if(lang!="english")
+    {
+        if(NcSettings::currentTranslator){
+            QApplication::removeTranslator(NcSettings::currentTranslator);
+        }
+
+        QTranslator* translator = new QTranslator();
+        translator->load("languages/"+lang+".qm");
+        QApplication::installTranslator(translator);
+        NcSettings::currentTranslator = translator;
+    }
+
+    if(getValue<bool>(CHECK_PERMISSIONS)){
+        qt_ntfs_permission_lookup=1;
+    }else{
+        qt_ntfs_permission_lookup=0;
     }
 }
 
@@ -300,13 +362,17 @@ void NcSettings::setStartWithSystem(bool start_with_system)
             process.start("createtasksheduler.exe");
             if( !process.waitForStarted() )
             {
-                QMessageBox::information(this,"NiceCopier message","Failed to start process createtasksheduler.exe:\n"+process.errorString());
+                QMessageBox::information(this,
+                                         tr("NiceCopier message"),
+                                         "Failed to start process createtasksheduler.exe:\n"+process.errorString());
                 return;
             }
 
             if( !process.waitForFinished() )
             {
-                QMessageBox::information(this,"NiceCopier message","Failed to wait for process createtasksheduler.exe:\n"+process.errorString());
+                QMessageBox::information(this,
+                                         tr("NiceCopier message"),
+                                         "Failed to wait for process createtasksheduler.exe:\n"+process.errorString());
                 return;
             }
 
@@ -318,13 +384,17 @@ void NcSettings::setStartWithSystem(bool start_with_system)
             process.start("schtasks /Delete /TN NiceCopier /F");
         if( !process.waitForStarted() )
         {
-            QMessageBox::information(this,"NiceCopier message","Failed to start process schtasks:\n"+process.errorString());
+            QMessageBox::information(this,
+                                     tr("NiceCopier message"),
+                                     "Failed to start process schtasks:\n"+process.errorString());
             return;
         }
 
         if( !process.waitForFinished() )
         {
-            QMessageBox::information(this,"NiceCopier message","Failed to wait for process schtasks:\n"+process.errorString());
+            QMessageBox::information(this,
+                                     tr("NiceCopier message"),
+                                     "Failed to wait for process schtasks:\n"+process.errorString());
             return;
         }
     }
@@ -352,13 +422,13 @@ bool NcSettings::startWithSystem(bool &run_as_admin)
         process.start("schtasks /query");
         if( !process.waitForStarted() )
         {
-            QMessageBox::information(NULL,"NiceCopier message","Failed to start process:\n"+process.errorString());
+            QMessageBox::information(NULL,tr("NiceCopier message"),"Failed to start process:\n"+process.errorString());
             return false;
         }
 
         if( !process.waitForFinished() )
         {
-            QMessageBox::information(NULL,"NiceCopier message","Failed to wait for process:\n"+process.errorString());
+            QMessageBox::information(NULL,tr("NiceCopier message"),"Failed to wait for process:\n"+process.errorString());
             return false;
         }
         QString content;
@@ -426,6 +496,7 @@ void NcSettings::on_progressBarColor_clicked()
     QPalette palette = ui->progressBar->palette();
     palette.setColor(QPalette::Highlight,color);
     ui->progressBar->setPalette(palette);
+    QApplication::setStyle("fusion");
 }
 
 
@@ -434,12 +505,35 @@ void NcSettings::on_usePlastiqueStyle_clicked(bool checked)
     NcSettings::settings->setValue("USE_PLASTIQUE_STYLE",checked);
     if(checked)
     {
-	defaultStyle = QApplication::style()->objectName();
-	qDebug(defaultStyle.toAscii());
-	QApplication::setStyle(new QPlastiqueStyle());
+        defaultStyle = QApplication::style()->objectName();
+        qDebug("NcSettings: style: "+defaultStyle.toUtf8());
+        QApplication::setStyle("fusion");
+    }else{
+        QApplication::setStyle(defaultStyle);
     }
-    else
-    {
-	QApplication::setStyle(defaultStyle);
+}
+
+
+void NcSettings::on_langCombobox_activated(const QString &lang)
+{
+    if(NcSettings::currentTranslator){
+        QApplication::removeTranslator(NcSettings::currentTranslator);
     }
+
+    if(lang==tr("english")){
+        NcSettings::currentTranslator = NULL;
+        return;
+    }
+
+    QTranslator* translator = new QTranslator();
+    translator->load("languages/"+lang+".ts");
+    QApplication::installTranslator(translator);
+    NcSettings::currentTranslator = translator;
+
+    ui->retranslateUi(this);
+    this->repaint();
+    this->update();
+    this->show();
+    setValue(LANGUAGE,lang);
+    fillStyleComboBox();
 }

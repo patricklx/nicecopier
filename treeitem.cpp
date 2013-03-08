@@ -95,173 +95,185 @@ QVariant TreeItem::data(int column,int role)
 {
     switch(column)
     {
-        case COL_NAME:
+    case COL_NAME:
+    {
+        if(role == Qt::DisplayRole)
         {
-            if(role == Qt::DisplayRole)
-            {
-                if(file)
-                    return file->getSourceName().afterLast("/");
-                if(folder)
-                    return folder->getSourceName();
-            }
+            if(file)
+                return file->getSourceName().afterLast("/");
+            if(folder)
+                return folder->getSourceName();
         }
+    }
         break;
-        case COL_PATH:
+    case COL_PATH:
+    {
+        if(role == Qt::DisplayRole)
         {
-            if(role == Qt::DisplayRole)
-            {
-                /*if(file)
+            /*if(file)
                     return file->getSourceName().beforeLast("/");
                 if(folder)
                     return folder->getParentFolder()->getSourcePath();*/
+        }
+    }
+        break;
+    case COL_IGNORE:
+    {
+        if(role == Qt::CheckStateRole)
+        {
+            if(file)
+            {
+                if( file->getParentFolder()->isIgnore() && file->getCopyHandle()==File::COPY_NOT_SET )
+                    return Qt::Checked;
+
+                if( file->getParentFolder()->isIgnoreExisting() && file->exists() &&  file->getCopyHandle()==File::COPY_NOT_SET )
+                    return Qt::Checked;
+
+                return (file->getCopyHandle() == File::COPY_IGNORE)*Qt::Checked;
+            }
+
+            if(folder)
+            {
+                if( folder->getParentFolder()->isIgnore() && folder->getCopyHandle()==Folder::COPY_NOT_SET )
+                    return Qt::Checked;
+
+                if( folder->getParentFolder()->isIgnoreExisting() && folder->exists() &&  folder->getCopyHandle()==Folder::COPY_NOT_SET )
+                    return Qt::Checked;
+
+                return ((folder->getCopyHandle() == Folder::COPY_IGNORE) ||
+                        (folder->getCopyHandle() == Folder::COPY_IGNORE_EXISTING ))*Qt::Checked;
+            }
+            return Qt::Unchecked;
+        }
+        if(role == Qt::DisplayRole)
+        {
+            if(file)
+            {
+                if(!file->getSourceError().isEmpty() || !file->getDestinationError().isEmpty())
+                {
+                    if(!file->getSourceError().isEmpty())
+                        return QString(QWidget::tr("Source: ") + file->getSourceError());
+                    else
+                        return QString(QWidget::tr("Destination: ")+ file->getDestinationError());
+                }
+            }
+            if(folder)
+            {
+                if( folder->getCopyHandle()==Folder::COPY_IGNORE_EXISTING )
+                    return QWidget::tr("ignore existing");
+                if( folder->getParentFolder()->isIgnoreExisting()
+                        && folder->exists()
+                        && folder->getCopyHandle()==Folder::COPY_NOT_SET )
+                    return QWidget::tr("ignore existing");
             }
         }
+    }
         break;
-        case COL_IGNORE:
+    case COL_REPLACE:
+    {
+        if(role == Qt::CheckStateRole)
         {
-            if(role == Qt::CheckStateRole)
+            if(file && file->exists())
             {
-                if(file)
-                {
-                    if( file->getParentFolder()->isIgnore() && file->getCopyHandle()==File::COPY_NOT_SET )
-                        return Qt::Checked;
-
-                    if( file->getParentFolder()->isIgnoreExisting() && file->exists() &&  file->getCopyHandle()==File::COPY_NOT_SET )
-                        return Qt::Checked;
-
-                    return (file->getCopyHandle() == File::COPY_IGNORE)*Qt::Checked;
-                }
-
-                if(folder)
-                {
-                    if( folder->getParentFolder()->isIgnore() && folder->getCopyHandle()==Folder::COPY_NOT_SET )
-                        return Qt::Checked;
-
-                    if( folder->getParentFolder()->isIgnoreExisting() && folder->exists() &&  folder->getCopyHandle()==Folder::COPY_NOT_SET )
-                        return Qt::Checked;
-
-                    return ((folder->getCopyHandle() == Folder::COPY_IGNORE) ||
-                            (folder->getCopyHandle() == Folder::COPY_IGNORE_EXISTING ))*Qt::Checked;
-                }
-                return Qt::Unchecked;
+                if( file->getParentFolder()->isReplace() && file->getCopyHandle()==File::COPY_NOT_SET)
+                    return Qt::Checked;
+                return (file->getCopyHandle() == File::COPY_REPLACE)*Qt::Checked;
             }
-            if(role == Qt::DisplayRole)
+            if(folder && folder->exists())
             {
-                if(file)
+                if( folder->getParentFolder()->isReplace() && folder->getCopyHandle()==Folder::COPY_NOT_SET)
+                    return Qt::Checked;
+
+                return (folder->getCopyHandle() == Folder::COPY_REPLACE)*Qt::Checked;
+            }
+        }
+    }
+        break;
+    case COL_RENAME:
+    {
+        if(role == Qt::DisplayRole)
+        {
+            if(file)
+            {
+                if( file->isRenamed() )
+                    return file->getDestinationName().afterLast("/");
+            }
+            if(folder)
+            {
+                if(folder->isRenamed())
+                    return folder->getDestName();
+            }
+        }
+        if(role == Qt::CheckStateRole)
+        {
+            if(file)
+            {
+                return (file->isRenamed())*Qt::Checked;
+            }
+            if(folder)
+            {
+                return (folder->isRenamed())*Qt::Checked;
+            }
+        }
+    }
+        break;
+    case COL_RETRY:
+    {
+        if(role == Qt::CheckStateRole)
+        {
+            if(file)
+                return file->shouldRetry()*Qt::Checked;
+        }
+    }
+        break;
+    case COL_SIZE:
+    {
+        if(role == Qt::DisplayRole)
+        {
+            if(file && file->getSize()>0)
+                return Util::toReadableSize(file->getSize());
+            if(folder && folder->getSize()>0)
+                return Util::toReadableSize(folder->getSize());
+        }
+    }
+        break;
+    case COL_EXISTS:
+    {
+        if(role == Qt::DisplayRole)
+        {
+            if(file)
+            {
+                if(file->exists() && file->getCopyHandle()!=File::COPY_RENAME)
                 {
-                    if(!file->getSourceError().isEmpty() || !file->getDestinationError().isEmpty())
+                    QString text;
+                    if(file->compareAge() == File::OLDER)
+                        text = QWidget::tr("Older");
+
+                    if(file->compareAge() == File::NEWER)
+                        text = QWidget::tr("Newer");
+
+                    if(file->compareAge() == File::EQUAL)
                     {
-                        if(!file->getSourceError().isEmpty())
-                            return QString("Source: " + file->getSourceError());
-                        else
-                            return QString("Destination: "+ file->getDestinationError());
+                        if(file->compareSize()==File::SAME)
+                            return QWidget::tr("Same Date and Size");
+                        text = QWidget::tr("Same Date");
                     }
-                }
-                if(folder)
-                {
-                    if( folder->getCopyHandle()==Folder::COPY_IGNORE_EXISTING )
-                        return "ignore existing";
-                    if( folder->getParentFolder()->isIgnoreExisting() && folder->exists() && folder->getCopyHandle()==Folder::COPY_NOT_SET )
-                        return "ignore existing";
-                }
-            }
-        }
-        break;
-        case COL_REPLACE:
-        {
-            if(role == Qt::CheckStateRole)
-            {
-                if(file && file->exists())
-                {
-                    if( file->getParentFolder()->isReplace() && file->getCopyHandle()==File::COPY_NOT_SET)
-                        return Qt::Checked;
-                    return (file->getCopyHandle() == File::COPY_REPLACE)*Qt::Checked;
-                }
-                if(folder && folder->exists())
-                {
-                    if( folder->getParentFolder()->isReplace() && folder->getCopyHandle()==Folder::COPY_NOT_SET)
-                        return Qt::Checked;
 
-                    return (folder->getCopyHandle() == Folder::COPY_REPLACE)*Qt::Checked;
+                    if(file->compareSize()==File::BIGGER)
+                        return text + QWidget::tr("/Bigger");
+                    if(file->compareSize()==File::SMALLER)
+                        return text + QWidget::tr("/Smaller");
+                    if(file->compareSize()==File::SAME)
+                        return text + QWidget::tr("/Same Size");
                 }
+            }
+            if(folder)
+            {
+                if(folder->exists())
+                    return QWidget::tr("Exists");
             }
         }
-        break;
-        case COL_RENAME:
-        {
-            if(role == Qt::DisplayRole)
-            {
-                if(file)
-                {
-                    if( file->isRenamed() )
-                        return file->getDestinationName().afterLast("/");
-                }
-                if(folder)
-                {
-                    if(folder->isRenamed())
-                        return folder->getDestName();
-                }
-            }
-            if(role == Qt::CheckStateRole)
-            {
-                if(file)
-                {
-                    return (file->isRenamed())*Qt::Checked;
-                }
-                if(folder)
-                {
-                    return (folder->isRenamed())*Qt::Checked;
-                }
-            }
-        }
-        break;
-        case COL_RETRY:
-        {
-            if(role == Qt::CheckStateRole)
-            {
-                if(file)
-                    return file->shouldRetry()*Qt::Checked;
-            }
-        }
-        break;
-        case COL_SIZE:
-        {
-            if(role == Qt::DisplayRole)
-            {
-                if(file && file->getSize()>0)
-                    return Util::toReadableSize(file->getSize());
-                if(folder && folder->getSize()>0)
-                    return Util::toReadableSize(folder->getSize());
-            }
-        }
-        break;
-        case COL_EXISTS:
-        {
-            if(role == Qt::DisplayRole)
-            {
-                if(file)
-                {
-                    if(file->exists() && file->getCopyHandle()!=File::COPY_RENAME)
-                    {
-                        if(file->compareAge() == File::OLDER)
-                            return "Older";
-                        if(file->compareAge() == File::NEWER)
-                            return "Newer";
-                        if(file->compareAge() == File::EQUAL)
-                        {
-                            if(file->compareSize()==File::SAME)
-                                return "Same Date and Size";
-                            return "Same Date";
-                        }
-                    }
-                }
-                if(folder)
-                {
-                    if(folder->exists())
-                        return "Exists";
-                }
-            }
-        }
+    }
         break;
         /*case COL_DONE:
             if(role == Qt::DisplayRole)
@@ -275,36 +287,36 @@ QVariant TreeItem::data(int column,int role)
             }
         break;*/
 
-        case COL_CHECKSUM_STAT:
+    case COL_CHECKSUM_STAT:
 
-            if(role == Qt::DisplayRole)
-            {
-                if(file){
-                    switch(file->getChecksumStatus())
-                    {
-                        case File::PASSED:
-                            return "PASSED";
-                        break;
-                        case File::FAILED:
-                            return "FAILED";
-                        break;
-                        case File::NOT_TESTED:
-                            return "NOT_TESTED";
-                        break;
-                    }
+        if(role == Qt::DisplayRole)
+        {
+            if(file){
+                switch(file->getChecksumStatus())
+                {
+                case File::PASSED:
+                    return QWidget::tr("PASSED");
+                    break;
+                case File::FAILED:
+                    return QWidget::tr("FAILED");
+                    break;
+                case File::NOT_TESTED:
+                    return QWidget::tr("NOT_TESTED");
+                    break;
                 }
             }
-            break;
+        }
+        break;
 
-        case COL_DEBUG:
-            if(role == Qt::DisplayRole)
-            {
-                int replace = folder?folder->getUsedDiskSpace():file->getSize();
-                int exist = folder?folder->getExistingSize():0;
-                int size = folder?folder->getSize():file->getSize();
+    case COL_DEBUG:
+        if(role == Qt::DisplayRole)
+        {
+            int replace = folder?folder->getReplaceSize():file->getSize();
+            int exist = folder?folder->getExistingSize():0;
+            int size = folder?folder->getSize():file->getSize();
 
-                return QString("size:%1 ,replace:%2 ,existing: %3").arg(size).arg(replace).arg(exist);
-            }
+            return QString("size:%1 ,replace:%2 ,existing: %3").arg(size).arg(replace).arg(exist);
+        }
         break;
     }
     return QVariant();
@@ -359,8 +371,8 @@ void TreeItem::rename(bool rename,QString name)
             bool ok = file->rename(name);
             if(!ok)
             {
-                QString msg = QString("Error renaming file to \"") + name + QString("\"!\n The file already exists\n");
-                QMessageBox::information(QApplication::activeWindow(),"NiceCopier rename",msg);
+                QString msg = QWidget::tr("Error renaming file to \"") + name + QWidget::tr("\"!\n The file already exists\n");
+                QMessageBox::information(QApplication::activeWindow(),QWidget::tr("NiceCopier rename"),msg);
 
             }
         }else
@@ -433,7 +445,15 @@ Folder *TreeItem::getFolder()
 TreeModel::TreeModel()
     : QAbstractItemModel()
 {
-    headers << "File" << "path" << "ignore" << "replace" << "rename" << "Size" << "Target:" << "CheckSum Test" << "retry";
+    headers << QWidget::tr("File")
+            << QWidget::tr("path" )
+            << QWidget::tr("ignore" )
+            << QWidget::tr("replace" )
+            << QWidget::tr("rename" )
+            << QWidget::tr("Size" )
+            << QWidget::tr("Target:" )
+            << QWidget::tr("CheckSum Test" )
+            << QWidget::tr("retry");
     onNetwork = false;
 }
 
@@ -518,23 +538,23 @@ bool sortFunction(TreeItem *i1,TreeItem *i2)
 {
     switch(sortColumn)
     {
-        case COL_NAME:
-        case COL_PATH:
-        case COL_EXISTS:
-        case COL_RETRY:
-        case COL_CHECKSUM_STAT:
-            return i1->data(sortColumn).toString() < i2->data(sortColumn).toString();
+    case COL_NAME:
+    case COL_PATH:
+    case COL_EXISTS:
+    case COL_RETRY:
+    case COL_CHECKSUM_STAT:
+        return i1->data(sortColumn).toString() < i2->data(sortColumn).toString();
         break;
-        case COL_SIZE:
-        {
-            File *f1 = (File*)i1->getFile();
-            File *f2 = (File*)i2->getFile();
+    case COL_SIZE:
+    {
+        File *f1 = (File*)i1->getFile();
+        File *f2 = (File*)i2->getFile();
 
-            if( f1 && f2 ){
+        if( f1 && f2 ){
 
-                return (f1->getSize() < f2->getSize());
-            }
+            return (f1->getSize() < f2->getSize());
         }
+    }
         break;
     }
     return false;
@@ -554,47 +574,47 @@ bool TreeModel::setData(const QModelIndex &index, const QVariant &value, int rol
 
     switch(index.column())
     {
-        case COL_RENAME:
+    case COL_RENAME:
+    {
+        if(role == Qt::CheckStateRole)
         {
-            if(role == Qt::CheckStateRole)
-            {
-                item->rename(value.toBool(),"");
-            }
-            if(role == Qt::EditRole)
-            {
-                item->rename(true,value.toString());
-            }
+            item->rename(value.toBool(),"");
         }
-        break;
-        case COL_REPLACE:
+        if(role == Qt::EditRole)
         {
-            if(role == Qt::CheckStateRole)
-            {
-                item->replace(value.toBool());
+            item->rename(true,value.toString());
+        }
+    }
+        break;
+    case COL_REPLACE:
+    {
+        if(role == Qt::CheckStateRole)
+        {
+            item->replace(value.toBool());
 
-            }
         }
+    }
         break;
-        case COL_IGNORE:
+    case COL_IGNORE:
+    {
+        if(role == Qt::CheckStateRole)
         {
-            if(role == Qt::CheckStateRole)
-            {
-                item->ignore(value.toBool());
-                if(item->getFile())
-                    item->getFile()->setRetry(false);
-            }
+            item->ignore(value.toBool());
+            if(item->getFile())
+                item->getFile()->setRetry(false);
         }
+    }
         break;
-        case COL_RETRY:
+    case COL_RETRY:
+    {
+        if(role == Qt::CheckStateRole)
         {
-            if(role == Qt::CheckStateRole)
-            {
-                if(item->getFile())
-                    item->getFile()->setRetry(value.toBool());
+            if(item->getFile())
+                item->getFile()->setRetry(value.toBool());
 
-                item->ignore(false);
-            }
+            item->ignore(false);
         }
+    }
     }
     updateItem(item);
     return true;
@@ -638,7 +658,23 @@ QVariant TreeModel::data(const QModelIndex &index, int role) const
 
     if(role == Qt::ToolTipRole)
     {
-        return item->data(index.column(),Qt::DisplayRole);
+        QString tooltip;
+        if(item->getFile()){
+            tooltip += "<b>Name: </b>%1<br>";
+            tooltip += "<b>Source Size: </b>%2<br>";
+            tooltip += "<b>Target Size: </b>%3<br>";
+            tooltip += "<b>Source Modified Date: </b>%4<br>";
+            tooltip += "<b>Target Modified Date: </b>%5<br>";
+
+            tooltip = tooltip.arg(item->data(index.column()).toString()).
+                    arg(Util::toReadableSize(item->getFile()->getSize())).
+                    arg(Util::toReadableSize(item->getFile()->getTargetSize())).
+                    arg(item->getFile()->getSourceModifiedDate()).
+                    arg(item->getFile()->getTargetModifiedDate());
+        }else{
+            tooltip = item->data(index.column()).toString();
+        }
+        return tooltip;
     }
 
     if(role == Qt::EditRole && index.column()==COL_RENAME)
@@ -662,8 +698,8 @@ Qt::ItemFlags TreeModel::flags(const QModelIndex &index) const
 
     File *f = item->getFile();
     if( f && (f->hasCopyStarted()
-        && f->getDestinationError().isEmpty()
-        && f->getSourceError().isEmpty())){
+              && f->getDestinationError().isEmpty()
+              && f->getSourceError().isEmpty())){
 
         return Qt::ItemIsSelectable;
     }
@@ -678,9 +714,9 @@ Qt::ItemFlags TreeModel::flags(const QModelIndex &index) const
         flags = flags | Qt::ItemIsEditable;
     }
     if(index.column()==COL_REPLACE ||
-       index.column()==COL_IGNORE ||
-       index.column()==COL_RENAME ||
-       index.column()==COL_RETRY)
+            index.column()==COL_IGNORE ||
+            index.column()==COL_RENAME ||
+            index.column()==COL_RETRY)
     {
         bool parentIgnored = item->getFile()?item->getFile()->getParentFolder()->isIgnore():item->getFolder()->getParentFolder()->isIgnore();
         bool parentReplaced = item->getFile()?item->getFile()->getParentFolder()->isReplace():item->getFolder()->getParentFolder()->isReplace();

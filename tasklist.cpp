@@ -106,7 +106,7 @@ void TaskList::insertTask(QWidget* task)
         widget = (QWidget*) data->getData();
 
     int position = ui->verticalLayout->indexOf(widget)+1;
-    qDebug()<<position;
+    qDebug()<<"TaskList: pos"<<position;
     ui->verticalLayout->insertWidget(position,task);
     updateList();
 }

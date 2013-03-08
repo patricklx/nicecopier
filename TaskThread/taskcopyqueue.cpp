@@ -8,6 +8,8 @@
 #include "errormessages.h"
 #include "ncsettings.h"
 
+#include <QTextCodec>
+
 #define BUFFER_SIZE_MAX 4*1024*1024
 
 int queue_interval_pause=0;
@@ -23,8 +25,10 @@ TaskCopyQueue::TaskCopyQueue(TaskThread* thread)
 
 TaskCopyQueue::~TaskCopyQueue()
 {
-    if( buffer != NULL )
+    if( buffer != NULL ){
         free(buffer);
+        buffer = NULL;
+    }
 }
 
 void TaskCopyQueue::setSpeed(int speed)
@@ -56,10 +60,13 @@ bool TaskCopyQueue::checkDiskSpace(QString fDestName)
         double disksize=0;
         if( getFreeTotalSpace(Destination,NULL,&disksize) )
         {
-            if( disksize < copyThreadInfo->getTotalSize()-copyThreadInfo->getCopyDirectory()->getUsedDiskSpace() )
+            double stillNeeded = copyThreadInfo->getTotalSize()
+                    -copyThreadInfo->getFileSizeCopied()
+                    -copyThreadInfo->getCopyDirectory()->getReplaceSize();
+            if( disksize < stillNeeded )
             {
-                QString msg = "Error:\n not enough size in destination:\""+Destination
-                        +"\"\n You need at least: " + Util::toReadableSize(copyThreadInfo->getTotalSize()-copyThreadInfo->getCopyDirectory()->getUsedDiskSpace());
+                QString msg = tr("Error:\n not enough size in destination:\"")+Destination
+                        +tr("\"\n You need at least: ") + Util::toReadableSize(stillNeeded);
                 int ans;
                 copyThreadInfo->sendMessage(msg,&ans,QMessageBox::Retry|QMessageBox::Cancel);
                 if(ans == QMessageBox::Retry )
@@ -93,7 +100,7 @@ bool TaskCopyQueue::resumeQueueToFile(QString last_file,Folder *folder)
         if( file->getCopyHandle() != File::COPY_IGNORE)
             file->setDestinationName(folder->getDestPath() + file->getDestinationName());
 
-        if( file->getSourceName() == last_file.toAscii() )
+        if( file->getSourceName() == last_file.toUtf8() )
         {
             file->setFirst();
             return true;
@@ -153,11 +160,12 @@ void TaskCopyQueue::runCheckSumTest(Folder* folder)
 void TaskCopyQueue::recursiveCopy(Folder *folder)
 {
     //test if the task should stop
-    if(copyThreadInfo->testDestroy())
+    if(copyThreadInfo->testDestroy()){
         return;
+    }
 
     //get the folder from the queue
-    if(folder->getCopyHandle()==Folder::COPY_IGNORE)
+    if(folder->getCopyHandle()==Folder::COPY_IGNORE )
     {
         return;
     }
@@ -176,7 +184,7 @@ void TaskCopyQueue::recursiveCopy(Folder *folder)
             if(!ok)
             {
                 int answer;
-                copyThreadInfo->sendMessage("Failed to create directory:\n"+folder->getDestPath()+"\n Retry?",
+                copyThreadInfo->sendMessage(tr("Failed to create directory:\n")+folder->getDestPath()+tr("\n Retry?"),
                                             &answer,
                                             QMessageBox::Cancel|QMessageBox::Yes
                                             );
@@ -185,12 +193,20 @@ void TaskCopyQueue::recursiveCopy(Folder *folder)
 
                 continue;
             }
+
+
+            qDebug()<<"TaskCopyQueue: attributes from: " << folder->getSourcePath();
+            DWORD attr = GetFileAttributes(folder->getSourcePath().toStdWString().c_str());
+            QString binary; binary.setNum(attr,2);
+            qDebug()<<"TaskCopyQueue: folder attributes"<<binary;
+            if( attr != INVALID_FILE_ATTRIBUTES){
+                SetFileAttributes(folder->getDestPath().toStdWString().c_str(),attr);
+            }else
+                qWarning()<<"TaskCopyQueue: INVALID_FILE_ATTRIBUTES-> last error:"<<GetLastError();
             break;
         }
         break;
     }
-    DWORD attr = GetFileAttributes(folder->getSourcePath().toStdWString().c_str());
-    SetFileAttributes(folder->getDestPath().toStdWString().c_str(),attr);
 
 
     //loop through all files in the folder
@@ -207,8 +223,11 @@ void TaskCopyQueue::recursiveCopy(Folder *folder)
             file->setCopyHandle(File::COPY_IGNORE);
         }
 
-        if(file->getCopyHandle() == File::COPY_IGNORE || file->shouldSkip())
+        if(file->getCopyHandle() == File::COPY_IGNORE
+                || file->shouldSkip()
+                || file->wasCopied())
         {
+            copyThreadInfo->setFilesIgnored();
             continue;
         }
 
@@ -276,9 +295,9 @@ void TaskCopyQueue::recursiveCopy(Folder *folder)
         if( subfolder->getCopyHandle() == Folder::COPY_NOT_SET )
             subfolder->setCopyHandle( folder->getCopyHandle() );
 
-        this->recursiveCopy(subfolder);
         if(copyThreadInfo->testDestroy())
             break;
+        this->recursiveCopy(subfolder);
     }
 }
 
@@ -295,9 +314,15 @@ void TaskCopyQueue::startCopyQueue()
 
     this->recursiveCopy(copyThreadInfo->getCopyDirectory());
 
+    qDebug("TaskCopyQueue: recursive copy finished");
+
+    if( this->copyThreadInfo->testDestroy() ){
+        return;
+    }
+
     if( copyThreadInfo->shouldVerifyChecksum() ){
 
-        copyThreadInfo->state = TaskThread::VERIFY_CHECKSUM;
+        copyThreadInfo->state = TaskThread::VerifyChecksum;
         copyThreadInfo->totalFiles = copyThreadInfo->getCopyDirectory()->getCopiedFilesCount();
         copyThreadInfo->totalSizeDone = 0;
         this->runCheckSumTest(copyThreadInfo->getCopyDirectory());

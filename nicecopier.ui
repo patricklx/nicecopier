@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>NiceCopier</class>
- <widget class="QMainWindow" name="NiceCopier">
-  <property name="windowModality">
-   <enum>Qt::NonModal</enum>
-  </property>
+ <widget class="QWidget" name="NiceCopier">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -447,41 +444,27 @@
    <iconset resource="resource.qrc">
     <normaloff>:/icons/Copy2.ico</normaloff>:/icons/Copy2.ico</iconset>
   </property>
-  <property name="documentMode">
+  <property name="documentMode" stdset="0">
    <bool>false</bool>
   </property>
-  <property name="tabShape">
-   <enum>QTabWidget::Triangular</enum>
-  </property>
-  <widget class="QWidget" name="centralWidget">
-   <property name="enabled">
-    <bool>true</bool>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>0</number>
    </property>
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
-     <horstretch>0</horstretch>
-     <verstretch>0</verstretch>
-    </sizepolicy>
+   <property name="margin">
+    <number>0</number>
    </property>
-   <layout class="QVBoxLayout" name="verticalLayout">
-    <property name="spacing">
-     <number>0</number>
-    </property>
-    <property name="margin">
-     <number>0</number>
-    </property>
-    <item>
-     <widget class="TaskList" name="tasklist" native="true">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-     </widget>
-    </item>
-   </layout>
-  </widget>
+   <item>
+    <widget class="TaskList" name="tasklist" native="true">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
+       <horstretch>0</horstretch>
+       <verstretch>0</verstretch>
+      </sizepolicy>
+     </property>
+    </widget>
+   </item>
+  </layout>
   <action name="actionExit">
    <property name="text">
     <string>Exit</string>
@@ -493,7 +476,7 @@
   <customwidget>
    <class>TaskList</class>
    <extends>QWidget</extends>
-   <header>tasklist.h</header>
+   <header>TaskList.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

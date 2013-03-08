@@ -24,9 +24,9 @@ class memory_t: public QObject
             size_t WorkingSetLimitSizeDecrement;
             typedef BOOL (WINAPI *PFN_SetProcessWorkingSetSizeEx)(HANDLE, SIZE_T, SIZE_T, DWORD);
 
-            HMODULE hKernel32 = ::GetModuleHandle(L"kernel32.dll");
+            HMODULE hKernel32 = ::GetModuleHandle(Ltr("kernel32.dll")ll"));
             PFN_SetProcessWorkingSetSizeEx pfnSetProcessWorkingSetSizeEx =
-                    (PFN_SetProcessWorkingSetSizeEx) ::GetProcAddress(hKernel32, "SetProcessWorkingSetSizeEx");
+                    (PFN_SetProcessWorkingSetSizeEx) ::GetProcAddress(hKernel32, tr("SetProcessWorkingSetSizeEx")Ex"));
             if (pfnSetProcessWorkingSetSizeEx != NULL)
             {
                 qDebug("SetProcessWorkingSetSizeEx is present");

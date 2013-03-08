@@ -22,6 +22,12 @@ class Folder{
             COPY_NOT_SET
         };
 
+
+        enum{
+            FullPath=1,
+            RelativePath=0
+        };
+
         Folder(TaskThread *copyinfo,Folder* parent, QFileInfo folderinfo=QFileInfo(),bool check_exist = true);
         Folder(TaskThread *copyinfo,QFileInfo source,QFileInfo destination);
         Folder(TaskThread *copyinfo,Folder* parent,QXmlStreamAttributes attributes);
@@ -29,7 +35,7 @@ class Folder{
 
         void initialize(TaskThread *copyinfo,Folder* parent, QFileInfo folderinfo=QFileInfo(),bool check_exist = true);
 
-        double getUsedDiskSpace();
+        double getReplaceSize();
         double getExistingSize();
         double getSize();
         bool deleteDestination();
@@ -53,8 +59,8 @@ class Folder{
         bool isRenamed();
         bool hasCopyStarted();
 
-        QString getDestPath(bool fullPath = true);
-        QString getSourcePath(bool fullPath = true);
+        QString getDestPath(bool fullPath = FullPath);
+        QString getSourcePath(bool fullPath = FullPath);
         QString getDestName();
         QString getSourceName();
 
@@ -64,11 +70,19 @@ class Folder{
         TreeItem* getTreeItem();
         Folder* getParentFolder();
 
+        enum FailHandle{
+            IgnoreAll,
+            Ask
+        };
+
         File *addFile(QFileInfo finfo, bool propagateSize = false);
         void addFile(File *file, bool propagateSize = false);
         void addFolder(Folder *folder, bool propagateSize = false);
-        Folder *addFolder(QFileInfo finfo);
-        void traverse(QString path);
+        Folder *addFolder(QFileInfo finfo, FailHandle &handle);
+
+
+
+        void traverse(QString path, FailHandle &handle);
 
         bool shouldRetry();
         void setShouldRetry(bool retry);
@@ -84,6 +98,7 @@ class Folder{
         void addSizeReplace(double size);
 
         void load(QXmlStreamReader &doc);
+        static QString getRealTargetPath(QString target);
 private:
         bool destExist;
         bool copyStarted;

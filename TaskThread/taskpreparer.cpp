@@ -34,7 +34,7 @@ void TaskPreparer::checkDestFreeSize()
             double replacesize = 0;
             if( disksize < copyThreadInfo->getTotalSize() )
             {
-                replacesize = copyThreadInfo->getCopyDirectory()->getUsedDiskSpace();
+                replacesize = copyThreadInfo->getCopyDirectory()->getReplaceSize();
             }
 
             if( disksize < copyThreadInfo->getTotalSize() - replacesize)
@@ -54,19 +54,18 @@ bool TaskPreparer::prepareCopy()
     int i  = 0;
 
     //Get All files from source path
+    Folder::FailHandle handle = Folder::Ask;
     while ( i < count )
     {
         QStringExt path = sourceList.at(i);
         QFileInfo file( path );
 
-
+        //just be sure that there are no problems with having a last seperator
         if(!file.exists())
         {
             path = path.beforeLast("/");
             file.setFile(path);
         }
-
-        qDebug()<<"add: "<<path;
 
         if ( file.exists() )
         {
@@ -77,7 +76,7 @@ bool TaskPreparer::prepareCopy()
             else
             {
                 file = QFileInfo( path.beforeLast('/') );
-                directory->addFolder(file);
+                directory->addFolder(file,handle);
             }
         }
         i++;
@@ -98,7 +97,6 @@ bool TaskPreparer::prepareCopy()
                 break;
             }
         }
-
 
         /*don't check for exiting folders if we already found an existing file*/
         if( !found )
@@ -150,9 +148,9 @@ void TaskPreparer::deleteDest(Folder *folder)
         {
 
             int res;
-            copyThreadInfo->sendMessage("Can't remove destination: " + fname + "\n retry?",&res,QMessageBox::Yes|
-                                                                                                    QMessageBox::No|
-                                                                                                    QMessageBox::Cancel);
+            copyThreadInfo->sendMessage(tr("Can't remove destination: ") + fname + tr("\n retry?"),
+                                        &res,
+                                        QMessageBox::Yes|QMessageBox::No|QMessageBox::Cancel);
             if ( res == QMessageBox::Ok )
             {
                 continue;

@@ -1,14 +1,17 @@
 #include "Folder.h"
 #include <QDir>
+#include <QFileIconProvider>
+#include <qdatetime.h>
+#include <QSettings>
 #include <QMessageBox>
 #include <QFileInfoList>
 #include <QFileInfo>
 #include <QDebug>
-#include "taskthread.h"
 #include <windows.h>
+
+#include "taskthread.h"
 #include "ReadableSize.h"
-#include <QFileIconProvider>
-#include <qdatetime.h>
+
 
 Folder::Folder(TaskThread *thread,Folder *parent, QFileInfo folderinfo,bool check_exist)
 {
@@ -17,31 +20,31 @@ Folder::Folder(TaskThread *thread,Folder *parent, QFileInfo folderinfo,bool chec
 
 Folder::Folder(TaskThread *copyinfo, QFileInfo source, QFileInfo destination)
 {
-    qDebug()<<source.path();
-    qDebug()<<destination.path();
+    qDebug()<<"Folder: source recieved: "<< source.path();
+    qDebug()<<"Folder: target recieved: "<<destination.path();
     initialize(copyinfo,NULL,source);
     destPath = QStringExt(destination.path()).toUtf8();
     QStringExt destinationPath = QStringExt(destination.path());
 
     QStringList list = QString(sourcePath).split('/');
 
-    sourceName = list.takeLast().toAscii();
-    sourcePath = QString(list.isEmpty()?(""):list.join("/")+"/").toAscii();
+    sourceName = list.takeLast().toUtf8();
+    sourcePath = QString(list.isEmpty()?(""):list.join("/")+"/").toUtf8();
 
     list = QString(destPath).split('/');
 
-    destName = list.takeLast().toAscii();
-    destPath = QString(list.isEmpty()?"":list.join("/")+"/").toAscii();
+    destName = list.takeLast().toUtf8();
+    destPath = QString(list.isEmpty()?"":list.join("/")+"/").toUtf8();
 
     if(exists())
     {
         destExist = true;
     }
 
-    qDebug()<<"source: "<<sourcePath;
-    qDebug()<<"sourceName: "<<sourceName;
-    qDebug()<<"destination: "<<destPath;
-    qDebug()<<"destinationName: "<<destName;
+    qDebug()<<"Folder: source: "<<sourcePath;
+    qDebug()<<"Folder: sourceName: "<<sourceName;
+    qDebug()<<"Folder: destination: "<<destPath;
+    qDebug()<<"Folder: destinationName: "<<destName;
 }
 
 Folder::Folder(TaskThread *copyinfo, Folder *parent, QXmlStreamAttributes attributes)
@@ -92,6 +95,7 @@ void Folder::initialize(TaskThread *copyinfo, Folder *parent, QFileInfo folderin
     sourceName = folderinfo.fileName().toUtf8();
     destName = folderinfo.fileName().toUtf8();
     sourcePath = folderinfo.path().toUtf8();
+
     treeItem = NULL;
     if(this->parentFolder)
     {
@@ -103,9 +107,9 @@ void Folder::initialize(TaskThread *copyinfo, Folder *parent, QFileInfo folderin
         }
     }
 
-    qDebug()<<"sourceName: "<<sourceName;
-    qDebug()<<"sourcepath: "<<sourcePath;
-    qDebug()<<"destname: "<<destName;
+    qDebug()<<"Folder init: sourceName: "<<sourceName;
+    qDebug()<<"Folder init:sourcepath: "<<sourcePath;
+    qDebug()<<"Folder init:destname: "<<destName;
 }
 
 void Folder::replace(bool replace)
@@ -234,7 +238,6 @@ void Folder::unrename()
 bool Folder::rename(QString new_name)
 {
     //get destination path
-    qDebug("renaming");
     if(copyhandle!=COPY_RENAME || !new_name.isEmpty())
     {
         QString path = parentFolder->getDestPath();
@@ -261,8 +264,8 @@ bool Folder::rename(QString new_name)
             test.append(afix);
             i++;
         }
-        qDebug()<<"renamed to: " << test;
-        destName = test.toAscii();
+        qDebug()<<"Folder: target from"<< sourcePath+sourceName  <<" renamed to: " << test;
+        destName = test.toUtf8();
     }
     return true;
 }
@@ -288,7 +291,7 @@ QString Folder::getSourcePath(bool fullPath)
     if(!sourceName.isEmpty())
         return sourcePath+sourceName+"/";
 
-    return sourcePath;
+    return QString::fromUtf8(sourcePath);
 }
 
 QString Folder::getDestName()
@@ -307,6 +310,7 @@ QString Folder::getDestPath(bool fullPath)
     if( !fullPath ){
         return this->destPath;
     }
+
     if(parentFolder != NULL )
     {
         QString path;
@@ -336,17 +340,21 @@ bool Folder::exists(bool reCheck)
     return destExist;
 }
 
-double Folder::getUsedDiskSpace()
+double Folder::getReplaceSize()
 {
     double size = 0;
     foreach(File *f,fileList)
     {
-        if( f->hasCopyStarted() )
-        {
-            size += f->getSize();
+
+        //if started copy already started halfway
+        if( f->hasCopyStarted() && !f->wasCopied() ){
+
+            //remaining copy size
+            size += f->getSize()-f->getCopiedSize();
         }
 
-        if( f->getCopyHandle()==File::COPY_REPLACE )
+        if( !f->wasCopied() &&
+                f->getCopyHandle()==File::COPY_REPLACE )
         {
             size += f->getTargetSize();
         }
@@ -354,7 +362,7 @@ double Folder::getUsedDiskSpace()
 
     foreach(Folder *f,subfolderList)
     {
-        f->getUsedDiskSpace();
+        size += f->getReplaceSize();
     }
 
     return size;
@@ -403,8 +411,9 @@ bool Folder::deleteSource()
         if ( !dir.rmdir(fname) && dir.exists() )
         {
             int res;
-            copyThreadInfo->sendMessage(QString("Can't remove folder: ") + fname + QString("\n retry?"),&res,QMessageBox::No|QMessageBox::Cancel
-                                                                                               |QMessageBox::Yes);
+            copyThreadInfo->sendMessage(QWidget::tr("Can't remove folder: ") + fname + QWidget::tr("\n retry?"),
+                                        &res,
+                                        QMessageBox::No|QMessageBox::Cancel|QMessageBox::Yes);
             if ( res == QMessageBox::No )
             {
                 break;
@@ -454,7 +463,9 @@ bool Folder::deleteDestination()
         if ( !dir.rmdir(fname) && dir.exists() )
         {
             int res;
-            copyThreadInfo->sendMessage(QString("Can't remove folder: ") + fname + QString("\n retry?"),&res,QMessageBox::No|QMessageBox::Cancel|QMessageBox::Yes);
+            copyThreadInfo->sendMessage(QWidget::tr("Can't remove folder: ") + fname + QWidget::tr("\n retry?"),
+                                        &res,
+                                        QMessageBox::No|QMessageBox::Cancel|QMessageBox::Yes);
             if ( res == QMessageBox::No )
             {
                 break;
@@ -591,7 +602,7 @@ size_t Folder::getToBeCopiedFilesCount()
 
 
 
-void Folder::traverse(QString path)
+void Folder::traverse(QString path, FailHandle &handle)
 {
     QDir dir(path);
     QFileInfoList list;
@@ -602,9 +613,17 @@ void Folder::traverse(QString path)
         if( list.isEmpty() )
         {
             int ans;
-            copyThreadInfo->sendMessage(QString("Can't open folder \"") + path + QString("\"\n Retry?"),
+
+            if(handle==IgnoreAll){
+                return;
+            }
+
+            copyThreadInfo->sendMessage(QWidget::tr("Can't open folder \"") + path + QWidget::tr("\"\n Retry?"),
                                     &ans,
-                                    QMessageBox::Yes|QMessageBox::No|QMessageBox::Cancel);
+                                    QMessageBox::Yes
+                                        |QMessageBox::No
+                                        |QMessageBox::Cancel
+                                        |QMessageBox::NoAll);
             if(ans==QMessageBox::Yes)
             {
                 continue;
@@ -618,6 +637,13 @@ void Folder::traverse(QString path)
                 copyThreadInfo->exit();
                 return;
             }
+
+            if(ans==QMessageBox::NoAll)
+            {
+                handle = IgnoreAll;
+                return;
+            }
+
         }else break;
     }
 
@@ -633,9 +659,6 @@ void Folder::traverse(QString path)
         if(finfo.path().contains("/../") || finfo.path().contains("/./") ){
             continue;
         }
-        if(finfo.path().contains("./")){
-            qDebug()<<finfo.path();
-        }
 
         if(finfo.isFile() || finfo.isSymLink())
         {
@@ -643,9 +666,9 @@ void Folder::traverse(QString path)
             continue;
         }
 
-        if(finfo.isDir())
+        if(finfo.isDir() && !finfo.isSymLink())
         {
-            addFolder(finfo);
+            addFolder(finfo,handle);
             continue;
         }
     }
@@ -742,7 +765,8 @@ void Folder::addFolder(Folder* folder, bool propagateSize)
 {
     subfolderList.append(folder);
 
-    folder->traverse(getSourcePath() + QString(folder->sourceName) );
+    FailHandle handle = Ask;
+    folder->traverse(getSourcePath() + QString(folder->sourceName),handle );
     if(propagateSize)
     {
         addSize(folder->getSize());
@@ -755,7 +779,7 @@ void Folder::addFolder(Folder* folder, bool propagateSize)
     }
 }
 
-Folder* Folder::addFolder(QFileInfo finfo)
+Folder* Folder::addFolder(QFileInfo finfo, FailHandle &handle)
 {
     Folder *folder = new Folder(copyThreadInfo,this,finfo,destExist);
     subfolderList.append(folder);
@@ -765,8 +789,50 @@ Folder* Folder::addFolder(QFileInfo finfo)
         path.append("/");
     }
 
-    folder->traverse(path+QString(folder->sourceName) );
+    folder->traverse(path+QString(folder->sourceName),handle );
     this->fsize += folder->fsize;
     this->fsizeExisting += folder->fsizeExisting;
     return folder;
+}
+
+
+
+//There are different kind of shortcuts, one is the "Folder shortcut"
+//http://en.wikipedia.org/wiki/Symbolic_link#Folder_Shortcuts.5B11.5D
+//to test if this is one we need to check the folder properties and
+//the dekstop.ini file
+QString Folder::getRealTargetPath(QString target)
+{
+    DWORD attr = GetFileAttributes(target.toStdWString().c_str());
+
+    QString folderShortcutID = "{0AFACED1-E828-11D1-9187-B532F1E9575D}";
+
+    qDebug()<<"Folder: target: "<<target;
+    qDebug()<<"Folder: attributes:"<<attr;
+    if( (attr&FILE_ATTRIBUTE_SYSTEM) || (attr&&FILE_ATTRIBUTE_READONLY) ){
+
+        qDebug()<<"Folder: is system or read-only";
+        if(!target.endsWith("/")){
+            target+="/";
+        }
+        QString desktopIni = target+"desktop.ini";
+        QSettings settings(desktopIni,QSettings::IniFormat);
+        qDebug()<<"Folder: desktop.ini keys"<<settings.allKeys();
+        if( settings.value(".ShellClassInfo/CLSID2") == folderShortcutID ){
+
+            QFileInfo info(target+"target.lnk");
+
+            target = info.symLinkTarget();
+
+            QFileInfo symlink(target);
+            if(symlink.isDir()){
+                target += "/";
+            }
+
+        }
+    }
+
+    qDebug()<<"Folder: real target: "<<target;
+
+    return target;
 }

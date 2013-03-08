@@ -24,7 +24,7 @@
 Updater::Updater()
 {
     progressDlg.setAttribute(Qt::WA_DeleteOnClose,false);
-    progressDlg.setLabelText("Downloading NiceCopier Setup...");
+    progressDlg.setLabelText(tr("Downloading NiceCopier Setup..."));
     niceCopierSetup_File = NULL;
 
     QFile::remove("NiceCopier_Setup.exe");
@@ -41,6 +41,7 @@ void Updater::check(bool inform_user)
     inform = inform_user;
 }
 
+
 void Updater::check_version()
 {
     QString html = reply->readAll();
@@ -55,22 +56,25 @@ void Updater::check_version()
 
     if(version.isEmpty())
     {
-        qDebug("no version found: %s",regex.errorString().toAscii().data());
+        qDebug("Updater: no version found: %s",regex.errorString().toUtf8().data());
         if(inform)
-            QMessageBox::information(NULL,"Version check","No new version found");
+            QMessageBox::information(NULL,
+                                     tr("Version check"),
+                                     tr("No new version found"));
         return;
     }
 
-
     QDate buildDate = QLocale(QLocale::C).toDate(QString(__DATE__).simplified(), QLatin1String("MMM d yyyy"));
     QString act_version = buildDate.toString("yy.MM.dd");
-    qDebug("'%s'",act_version.toAscii().data());
+    qDebug("Updater: '%s'",act_version.toUtf8().data());
     latest_version = version;
     if(version == act_version)
     {
-        qDebug("same version found");
+        qDebug("Updater: same version found");
         if(inform)
-            QMessageBox::information(NULL,"Version check","No new version found");
+            QMessageBox::information(NULL,
+                                     tr("Version check"),
+                                     tr("No new version found"));
         return;
     }
 
@@ -90,7 +94,7 @@ void Updater::showProgress()
     niceCopierSetup_File = new QFile("NiceCopier_Setup.exe");
     if(!niceCopierSetup_File->open(QFile::WriteOnly))
     {
-        qDebug("can't open file");
+        qDebug("Updater: can't open file");
         progressDlg.close();
         progressDlg.hide();
         reply->abort();
@@ -106,8 +110,9 @@ void Updater::showProgress()
     connect(&progressDlg,SIGNAL(canceled()),this,SLOT(cancel()));
 
 
-    progressDlg.move(NcSettings::screenCenter()-progressDlg.rect().bottomRight()/2);
+
     progressDlg.show();
+    progressDlg.move(NcSettings::screenCenter()-progressDlg.rect().bottomRight()/2);
 
     timer.start();
 }
@@ -117,8 +122,8 @@ void Updater::getRedirect()
     QVariant possibleRedirectUrl = reply->attribute(QNetworkRequest::RedirectionTargetAttribute);
     if(!possibleRedirectUrl.toString().isEmpty())
     {
-        qDebug("redirect");
-        qDebug(possibleRedirectUrl.toString().toAscii());
+        qDebug("Updater: redirect");
+        qDebug(possibleRedirectUrl.toString().toUtf8());
         reply->deleteLater();
         reply = qnam.get(QNetworkRequest(possibleRedirectUrl.toString()));
         showProgress();
@@ -130,8 +135,8 @@ void Updater::getRedirect()
 
     QString url = regex.cap(1);
     url.replace("&amp;","&");
-    qDebug("follow");
-    qDebug(url.toAscii());
+    qDebug("Updater: follow");
+    qDebug("Updater: "+url.toUtf8());
 
     reply->deleteLater();
     reply = qnam.get(QNetworkRequest(url));
@@ -164,10 +169,10 @@ void Updater::download()
 
     if(link.isEmpty())
     {
-        qDebug("no url link found: %s",regex.errorString().toAscii().data());
+        qDebug("Updater: no url link found: %s",regex.errorString().toUtf8().data());
         return;
     }
-    qDebug() << "link:"<<link;
+    qDebug() << "Updater: link:"<<link;
 
     QUrl url = QUrl(link);
     reply = qnam.get(QNetworkRequest(url));
@@ -177,7 +182,7 @@ void Updater::download()
 
 void Updater::downloadFinished()
 {
-    qDebug("downloaded");
+    qDebug("Updater: downloaded");
 
     QProcess proc;
     QStringList args;
@@ -209,7 +214,7 @@ void Updater::downloadFinished()
 
 void Updater::cancel()
 {
-    qDebug("abort");
+    qDebug("Updater: abort");
     if(reply == NULL)
         return;
 
@@ -229,7 +234,7 @@ void Updater::setProgress(qint64 recieved, qint64 total)
 {
     if(reply==NULL)
     {
-        qDebug("reply is NULL??");
+        qDebug("Updater: reply is NULL??");
         return;
     }
 
@@ -247,6 +252,9 @@ void Updater::setProgress(qint64 recieved, qint64 total)
     progressDlg.setRange(0,total);
     progressDlg.setValue(recieved);
 
-
 }
+
+
+
+
 

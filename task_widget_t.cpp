@@ -18,7 +18,7 @@ TaskWidget::TaskWidget(QWidget *parent,QString name) :
     QByteArray array = taskContent.toUtf8();
     QBuffer buffer(&array);
     buffer.open(QIODevice::ReadOnly);
-    TaskThread taskinfo(buffer,true);
+    TaskThread taskinfo(buffer,TaskThread::ParseOnly);
 
     ui->lbFromPath->setText(taskinfo.getSourcePath());
     ui->lbToPath->setText(taskinfo.getDestinationPath());
@@ -27,7 +27,7 @@ TaskWidget::TaskWidget(QWidget *parent,QString name) :
     {
         QString filename = taskinfo.getSourceList()[a].afterLast("/");
         if(filename.isEmpty())
-            filename = taskinfo.getSourceList()[a].beforeLast("/").afterLast("/")+"/";
+            filename = taskinfo.getSourceList()[a].beforeLast("/").afterLast("/");
 
         ui->fileslistWidget->addItem(filename);
     }
@@ -36,7 +36,7 @@ TaskWidget::TaskWidget(QWidget *parent,QString name) :
     reader.readNextStartElement();
     if ( reader.hasError() )
     {
-        qWarning("Failed to load xml: %s\n\n %s",reader.errorString().toAscii().data(),array.data() );
+        qWarning("Failed to load xml: %s\n\n %s",reader.errorString().toUtf8().data(),array.data() );
         return;
     }
 
@@ -56,10 +56,10 @@ void TaskWidget::setPinned(bool pinned)
     {
         ui->InfoWidget->hide();
         ui->btInfo->setChecked(false);
-        ui->btPinn->setText("unPin");
+        ui->btPinn->setText(tr("unPin"));
     }
     else
-        ui->btPinn->setText("Pin");
+        ui->btPinn->setText(tr("Pin"));
 }
 
 void TaskWidget::on_btExecute_clicked()
@@ -81,17 +81,17 @@ void TaskWidget::on_btInfo_toggled(bool checked)
 
 void TaskWidget::on_btPinn_clicked()
 {
-    if(ui->btPinn->text()=="unPin")
+    if(ui->btPinn->text()==tr("unPin"))
     {
-        ui->btPinn->setText("Pin");
+        ui->btPinn->setText(tr("Pin"));
         RecentTasks::unPinnRecentTask(task);
         emit pinned(false);
         return;
     }
 
-    if(ui->btPinn->text()=="Pin")
+    if(ui->btPinn->text()==tr("Pin"))
     {
-        ui->btPinn->setText("unPin");
+        ui->btPinn->setText(tr("unPin"));
         RecentTasks::pinnRecentTask(task);
         emit pinned(true);
         return;
@@ -102,14 +102,16 @@ void TaskWidget::on_btRename_clicked()
 {
     QInputDialog input(this);
     input.setInputMode(QInputDialog::TextInput);
-    input.setWindowTitle("Rename Task");
-    input.setLabelText("Rename task to: ");
+    input.setWindowTitle(tr("Rename Task"));
+    input.setLabelText(tr("Rename task to: "));
 
     input.exec();
     QString name = input.textValue();
     if( !RecentTasks::rename(task,name) )
     {
-        QMessageBox::warning(QApplication::activeWindow(),"rename failed","failed to rename task to: "+name);
+        QMessageBox::warning(QApplication::activeWindow(),
+                             tr("rename failed"),
+                             tr("failed to rename task to: ")+name);
     }else
     {
         ui->groupBox_4->setTitle(name+"    "+date);

@@ -102,7 +102,7 @@ void TasksDialog::togglePinnTask(bool pinn)
     {
         ui->layout_recent->removeWidget(w);
         ui->layout_pinned->insertWidget(1,w);
-        qDebug("pinned");
+        qDebug("TasksDialog: pinned");
     }
 
     if(!pinn)
@@ -111,7 +111,7 @@ void TasksDialog::togglePinnTask(bool pinn)
         ui->layout_recent->insertWidget(1,w);
         if( ui->layout_recent->count()-1 > NcSettings::getValue<int>(NcSettings::MAX_RECENT_TASKS) )
 	    delete ui->layout_recent->takeAt(ui->layout_recent->count()-1);
-        qDebug("unPinned");
+        qDebug("TasksDialog: unPinned");
     }
 }
 

@@ -13,11 +13,13 @@
 NCServer::NCServer()
     :QObject()
 {
+    nc_server.setSocketOptions(QLocalServer::OtherAccessOption);
     nc_server.listen("nicecopier_IPC");
 
     if( !nc_server.isListening())
     {
-        QMessageBox::warning(NULL,"NiceCopier","The server failed to start\n NiceCopier won't intercept any copy/move events!");
+        QMessageBox::warning(NULL,tr("NiceCopier"),
+                             tr("The server failed to start\n NiceCopier won't intercept any copy/move events!"));
     }else
     {
         connect(&nc_server,SIGNAL(newConnection()),SLOT(acceptNewClient()));
@@ -30,11 +32,11 @@ void NCServer::acceptNewClient()
     QLocalSocket *client = nc_server.nextPendingConnection();
     if(client==NULL)
     {
-	qWarning("no client");
+        qWarning("NCServer: no client");
         return;
     }
     //connect(client,SIGNAL(disconnected()),SLOT(clientDisconnected()));
-    qDebug("client accepted");
+    qDebug("NCServer: client accepted");
 
 
 
@@ -50,7 +52,7 @@ void NCServer::acceptNewClient()
             break;
     }
 
-    qDebug("client disconnected");
+    qDebug("NCServer: client disconnected");
 
     if( !recieved.isEmpty() )
     {

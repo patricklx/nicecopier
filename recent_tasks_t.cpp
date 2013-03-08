@@ -16,7 +16,7 @@ void RecentTasks::initialize()
 {
     QDir dir;
     if(!dir.exists("recent_tasks"))
-	dir.mkdir("recent_tasks");
+        dir.mkdir("recent_tasks");
 
     qsrand(QDateTime::currentMSecsSinceEpoch());
 }
@@ -104,7 +104,7 @@ void RecentTasks::addRecentTask(QString content)
     QString taskname;
     while(1)
     {
-	taskname = "task_%1";
+    taskname = "task_%1";
 	taskname = taskname.arg(qrand());
 	QFile file("recent_tasks/"+taskname);
 	if(!file.exists())
@@ -123,7 +123,7 @@ void RecentTasks::addRecentTask(QString content)
 
     if( !file.open(QIODevice::WriteOnly) )
 	return;
-    file.write(content.toAscii());
+    file.write(content.toUtf8());
 
 
     QFile file2("recent_tasks/recentlist.txt");
@@ -217,12 +217,12 @@ bool RecentTasks::rename(QString old, QString _new,bool listOnly)
 	}
     }
     if(listOnly)
-	return false;
+        return false;
 
     bool renameOK = QFile::rename("recent_tasks/"+old,"recent_tasks/"+_new);
     if(!renameOK)
     {
-	rename(_new,old,true);
+        rename(_new,old,true);
     }
     return renameOK;
 }
@@ -244,5 +244,5 @@ void RecentTasks::setTaskDate(QString task)
     file.close();
     if( !file.open(QFile::WriteOnly) )
         return;
-    file.write(output.toAscii());
+    file.write(output.toUtf8());
 }

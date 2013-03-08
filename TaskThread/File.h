@@ -17,7 +17,7 @@ class File
 {
     public:
         enum AgeCompare{OLDER,NEWER,EQUAL};
-        enum SizeCompare{DIFFERENT,SAME};
+        enum SizeCompare{SMALLER,BIGGER,SAME};
         enum CopyHandle{COPY_REPLACE,COPY_IGNORE,COPY_RENAME,COPY_NOT_SET};
         enum ChecksumStatus{PASSED,FAILED,NOT_TESTED};
 
@@ -74,9 +74,10 @@ class File
         bool verifyChecksum();
         double getCopiedSize();
 
-        ChecksumStatus getChecksumStatus();
-
-    private:
+        ChecksumStatus getChecksumStatus();        
+        QString getSourceModifiedDate();
+        QString getTargetModifiedDate();
+private:
         bool retry;
         bool firstInQueue;
         bool skip;
@@ -103,6 +104,8 @@ class File
         QByteArray  fDestName;
         QByteArray  derror;
         QByteArray  serror;
+        QByteArray  sourceModifiedStr;
+        QByteArray  targetModifiedStr;
 
         size_t buffersize;
         double fsize;
@@ -113,10 +116,13 @@ class File
 
         qint16 sourceCheckSum;
 
+
         void saveCopiedSize();
-        bool copyFile(QFile* fsource, QFile* fdest);
+        bool copyFile();
         bool setFileSize();
         bool checkShouldRetry();
+        void handleZeroSizeFile();
+        bool prepareCopy();
 };
 
 #endif // File.h

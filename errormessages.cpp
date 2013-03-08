@@ -16,14 +16,10 @@ DlgErrorMessages::DlgErrorMessages(QWidget *parent) :
     ui->setupUi(this);
     ui->BtRetry->hide();
 
-    setWindowTitle("NiceCopier message");
+    setWindowTitle(tr("NiceCopier message"));
 
-    setParent(NULL);
-    Qt::WindowFlags flag = 0;
-    if( NcSettings::getValue<int>(NcSettings::ALWAYS_ON_TOP) )
-        flag = Qt::WindowStaysOnTopHint;
-    this->setWindowFlags(Qt::CustomizeWindowHint|Qt::WindowMinMaxButtonsHint|flag);
 
+    this->setWindowFlags(Qt::CustomizeWindowHint|Qt::WindowMinMaxButtonsHint|Qt::Dialog);
 
     adjustSize();
 
@@ -64,9 +60,13 @@ bool DlgErrorMessages::setErrors(TaskThread *thread, int type)
         ui->lbSource->setText(thread->getSourcePath());
         ui->lbSource->setToolTip(ui->lbSource->text());
 
+        qDebug()<<"DlgErrorMessages: "<<"file exists";
+        qDebug()<<"DlgErrorMessages: dest: "<<thread->getDestinationPath();
+        qDebug()<<"DlgErrorMessages: source: "<<thread->getSourcePath();
+
         if(thread->getDestinationPath() == thread->getSourcePath())
         {
-            qDebug("is equal");
+            qDebug()<<"DlgErrorMessages: paths are equal";
             QList<TreeItem*> topitems = ui->treeWidget->getModel()->getTopLevelItems();
             for(int i=0;i<topitems.count();i++)
             {
@@ -86,23 +86,25 @@ bool DlgErrorMessages::setErrors(TaskThread *thread, int type)
         ui->lbDestination->setToolTip(ui->lbDestination->text());
         ui->lbSource->setText(thread->getSourcePath());
         ui->lbSource->setToolTip(ui->lbSource->text());
-        ui->label->setText("Edit file copy tree");
+        ui->label->setText(tr("Edit file copy tree"));
         if(type == FREE_SPACE_MODE)
         {
-            QString msg = "Not enough size in destination!\n You need at least: "+
-                          Util::toReadableSize( thread->getTotalSize() )+
-                          "\nOr don't copy some files/folders";
+            QString msg = tr("Not enough (free?) size in destination!\n You need at least: ")+
+                          Util::toReadableSize( thread->getTotalSize() -
+                                                thread->getCopyDirectory()->getReplaceSize() )+
+                          tr("\nOr don't copy some files/folders");
             ui->label->setText(msg);
         }
         return true;
     }
+    return false;
 }
 
 
 bool DlgErrorMessages::setErrors(TaskThread *thread, QList<File *> &files, int type)
 {
     m_error_type = type;
-    ui->label->setText("An error occurred");
+    ui->label->setText(tr("An error occurred"));
     ui->BtRetry->show();
     ui->BtReplace->hide();
     ui->BtRename->hide();
@@ -132,7 +134,9 @@ void DlgErrorMessages::on_BtOk_clicked()
                 && item->data(COL_IGNORE,Qt::CheckStateRole) != Qt::Checked
                 )
             {
-                QMessageBox::information(this,"Copyhandle not set","You need to set the copyhandle for: "+item->getFile()->getSourceName());
+                QMessageBox::information(this,tr("Copyhandle not set"),
+                                         tr("You need to set the copyhandle for: ")+
+                                         item->getFile()->getSourceName());
                 return;
             }
         }else
@@ -142,7 +146,10 @@ void DlgErrorMessages::on_BtOk_clicked()
                 && item->data(COL_IGNORE,Qt::CheckStateRole) != Qt::Checked
                 )
             {
-                QMessageBox::information(this,"Copyhandle not set","You need to set the copyhandle for: "+item->getFolder()->getSourceName());
+                QMessageBox::information(this,
+                                         tr("Copyhandle not set"),
+                                         tr("You need to set the copyhandle for: ")
+                                         +item->getFolder()->getSourceName());
                 return;
             }
         }

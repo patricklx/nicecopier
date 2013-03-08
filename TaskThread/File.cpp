@@ -89,10 +89,6 @@ File::File(TaskThread *copyinfo, Folder *folder, QXmlStreamAttributes attributes
 
 File::~File()
 {
-    if( fDest != NULL)
-        delete fDest;
-    if( fSource != NULL)
-        delete fSource;
     delete treeItem;
 }
 
@@ -123,10 +119,13 @@ void File::initialize(TaskThread *copyinfo, Folder *folder, QFileInfo fileinfo, 
     treeItem = new TreeItem(*this,this->parentFolder->getTreeItem());
     treeItem->setRowIndex(parentFolder->getSubFolderList().count()+parentFolder->getFileList().count());
 
-    if(fDestName.length() == 0)
+    if(fDestName.length() == 0){
+        qWarning()<<"fdestName empty for : " + fSourceName;
         return;
+    }
 
     fsize = fileinfo.size();
+    qDebug()<<"size of "<<fileinfo.absolutePath()<<": "<<fsize;
     copyinfo->addFileCount(1);
     copyinfo->addTotalSize(fsize);
 
@@ -148,9 +147,27 @@ void File::initialize(TaskThread *copyinfo, Folder *folder, QFileInfo fileinfo, 
         if(destModified==sourceModified)
             destAge = EQUAL;
 
+        sourceModifiedStr = sourceModified.toString().toLocal8Bit();
+        targetModifiedStr = destModified.toString().toLocal8Bit();
+
         targetSize = destfileinfo.size();
-        destSize = (targetSize==fsize)?SAME:DIFFERENT;
+        if(targetSize<fsize)
+            destSize = SMALLER;
+        if(targetSize>fsize)
+            destSize = BIGGER;
+        if(targetSize==fsize)
+            destSize = SAME;
     }
+}
+
+QString File::getSourceModifiedDate()
+{
+    return sourceModifiedStr;
+}
+
+QString File::getTargetModifiedDate()
+{
+    return targetModifiedStr;
 }
 
 double File::getTargetSize()
@@ -190,7 +207,7 @@ void File::setCopyHandle(File::CopyHandle handle)
 
 void File::setDestinationName(QString name)
 {
-    fDestName = name.toAscii();
+    fDestName = name.toUtf8();
 }
 
 bool File::verifyChecksum()
@@ -236,7 +253,7 @@ bool File::verifyChecksum()
 
         this->derror = "checksum test failed!";
         this->checkSumStatus = FAILED;
-        qDebug()<<"checksum failed";
+        qWarning()<<"File: checksum failed";
 
     }else{
         this->checkSumStatus = PASSED;
@@ -318,7 +335,7 @@ void File::unrename()
 {
     if(copyhandle==COPY_RENAME)
     {
-        fDestName = getSourceName().afterLast("/").toAscii();
+        fDestName = getSourceName().afterLast("/").toUtf8();
         copyhandle = COPY_NOT_SET;
 
         if(destExist)
@@ -360,7 +377,7 @@ bool File::rename(QStringExt new_name)
     if(!new_name.isEmpty())
     {
         QByteArray temp = fDestName;
-        fDestName = new_name.toAscii();
+        fDestName = new_name.toUtf8();
         if(exists(true))
         {
             fDestName = temp;
@@ -401,7 +418,7 @@ bool File::rename(QStringExt new_name)
             }
             i++;
         }
-        fDestName = new_name.toAscii();
+        fDestName = new_name.toUtf8();
 
         ignore(false);
         replace(false);
@@ -497,7 +514,7 @@ bool File::setFileSize()
     HANDLE HFile = (HANDLE)_get_osfhandle(fDest->handle() );
     if(HFile==NULL)
     {
-        qDebug("failed to get file handle");
+        qDebug()<<"File: failed to get file handle";
         return false;
     }
 
@@ -530,13 +547,14 @@ bool File::setFileSize()
 /** should retry copying a file whenever the location was lost (e.g. because of a disconnect) **/
 bool File::checkShouldRetry()
 {
-    if( copyThreadInfo->getCopyType() == TaskListHandler::LOCAL_NETWORK || copyThreadInfo->getCopyType() == TaskListHandler::FROM_INET )
+    if( copyThreadInfo->getCopyType() == TaskListHandler::LOCAL_NETWORK
+            || copyThreadInfo->getCopyType() == TaskListHandler::FROM_INET )
     {
         if( fDest->error() == QFile::TimeOutError || fDest->error() == QFile::OpenError )
         {
             QFileInfo f(fDestName);
             QDir d(f.path());
-            derror = fDest->errorString().toAscii();
+            derror = fDest->errorString().toUtf8();
             if( !d.exists() )
             {
                 retry = true;
@@ -548,11 +566,12 @@ bool File::checkShouldRetry()
                 return false;
             }
         }
-        if(fSource->error() == QFile::TimeOutError || fSource->error() == QFile::OpenError )
+        if(fSource->error() == QFile::TimeOutError
+                || fSource->error() == QFile::OpenError )
         {
             QFileInfo f(fSourceName);
             QDir d(f.path());
-            serror = fSource->errorString().toAscii();
+            serror = fSource->errorString().toUtf8();
             if( !d.exists() )
             {
                 retry = true;
@@ -619,19 +638,44 @@ void File::setFirst()
 }
 
 
-bool File::startCopyFile()
+void File::handleZeroSizeFile()
 {
-    bool try_again=true;
+    DWORD attr = GetFileAttributes(QString(fSourceName).toStdWString().c_str());
+    QString binary;binary.setNum(attr,2);
+    qDebug()<<"File: "<<fSourceName;
+    qDebug()<<"File: attributes: "<<binary;
+    if( attr!= INVALID_FILE_ATTRIBUTES){
+            SetFileAttributes(QString(fDestName).toStdWString().c_str(),attr);
+    }else{
+        qCritical()<<"File: Invalid attributes for "<<fDestName;
+    }
+
+    copied = true;
+}
+
+bool File::prepareCopy()
+{
+    bool retryIfFailed=true;
     averageSpeed = buffersize;
 
-    QFile flDest(fDestName);
-    QFile flSource(fSourceName);
 
-    fDest = &flDest;
-    fSource = &flSource;
+    if(fDest)delete fDest;
+    if(fSource)delete fSource;
+    fDest = new QFile(fDestName);
+    fSource = new QFile(fSourceName);
+
+    if( fDest==fSource ){
+
+        derror = "You can't overwrite a file with itself!";
+        return false;
+    }
 
     while(1)
     {
+        //close for retrying, prevents "already open messsage in debug window"
+        fSource->close();
+        fDest->close();
+        qDebug()<<"File: preparing...";
         if(copyThreadInfo->testDestroy())
         {
             saveCopiedSize();
@@ -639,79 +683,69 @@ bool File::startCopyFile()
         }
 
         copyStarted = true;
-        flSource.open(QFile::ReadOnly);
-        if( !flSource.isOpen() )
+        fSource->open(QFile::ReadOnly);
+        if( !fSource->isOpen() )
         {
-            serror = flSource.errorString().toAscii();
-            if( checkShouldRetry() )
-            {
-                QThread::msleep(500);
-                continue;
-            }else if(try_again)
-            {
-                try_again = false;
-                continue;
-            }
-            fDest = NULL;
-            fSource = NULL;
-            return false;
+            serror = fSource->errorString().toUtf8();
+            goto failed;
         }
 
+        //delete destination file if it should be replaced
+        if( fDest->exists() && copyhandle==COPY_REPLACE ){
 
-        if((firstInQueue || retry) && flDest.exists())
-            flDest.open(QFile::ReadWrite);
+            //ignore permissions, also read-only, seems to be default on windows
+            if( !NcSettings::getValue<bool>(NcSettings::CHECK_PERMISSIONS) ){
+
+                if( !fDest->isWritable() ){
+                    fDest->setPermissions(QFile::WriteUser);
+                }
+                if( !fDest->remove() ){
+                    qDebug()<<"File: "<<fDestName;
+                    qDebug()<<"File: failed to remove -> "<<fDest->errorString();;
+                }
+            }
+        }
+
+        if( ( isFirst() || shouldRetry() ) && fDest->exists())
+        {
+            //continue where we left
+            fDest->open(QFile::ReadWrite);
+        }
         else
         {
-            if( flDest.open(QFile::WriteOnly) )
+            //create new file
+            if( fDest->open(QFile::WriteOnly) )
             {
                 FILETIME creation,lastAccess,lastModified;
                 GetFileTime((HANDLE)_get_osfhandle(fSource->handle()),&creation,&lastAccess,&lastModified);
                 SetFileTime((HANDLE)_get_osfhandle(fDest->handle()),&creation,&lastAccess,&lastModified);
             }
         }
-        if( !flDest.isOpen() )
+        if( !fDest->isOpen() )
         {
-            derror = flDest.errorString().toAscii();
-            if( checkShouldRetry() )
-            {
-                QThread::msleep(500);
-                continue;
-            }else if(try_again)
-            {
-                try_again = false;
-                continue;
-            }
-            fDest = NULL;
-            fSource = NULL;
-            return false;
+            derror = fDest->errorString().toUtf8();
+            goto failed;
         }
-        try_again = true;
+        retryIfFailed = true;
 
         if( fsize == 0 )
         {
-            flSource.close();
-            flDest.close();
-            fDest = NULL;
-            fSource = NULL;
-            DWORD attr = GetFileAttributes(QString(fSourceName).toStdWString().c_str());
-            SetFileAttributes(QString(fDestName).toStdWString().c_str(),attr);
+            handleZeroSizeFile();
             return true;
         }
 
 
         if( !setFileSize() )
         {
-            fDest = NULL;
-            fSource = NULL;
             return false;
         }
 
-        if( firstInQueue || retry)
+        if( isFirst() || shouldRetry() )
         {
             double offset = getSavedCopiedSize();
-            flSource.seek( offset );
-            flDest.seek( offset );
-            if( retry )
+            fSource->seek( offset );
+            fDest->seek( offset );
+            if( shouldRetry() )
             {
                 copyThreadInfo->addSizeDone(-copiedSize);
                 copyThreadInfo->addSizeDone(offset);
@@ -719,9 +753,40 @@ bool File::startCopyFile()
             copiedSize = offset;
         }
 
-        bool ok = copyFile(&flSource,&flDest);
-        flSource.close();
-        flDest.close();
+
+        return true;
+
+        failed:
+
+        qDebug()<<"File: something failed";
+        qDebug()<<"File: "<<derror;
+
+        if( checkShouldRetry() )
+        {
+            QThread::msleep(500);
+            continue;
+        }else if(retryIfFailed)
+        {
+            retryIfFailed = false;
+            continue;
+        }
+            return false;
+        }
+}
+
+bool File::startCopyFile()
+{
+    bool ok = false;
+    while(1)
+    {
+
+        qDebug("File: preparing copy");
+        ok = prepareCopy();
+        if(!ok)
+            break;
+
+        qDebug("File: copying");
+        ok = copyFile();
 
         if(!ok)
         {
@@ -729,22 +794,35 @@ bool File::startCopyFile()
             if( copyThreadInfo->getCopyType() == TaskListHandler::LOCAL_NETWORK
                 || copyThreadInfo->getCopyType() == TaskListHandler::FROM_INET )
             {
+                QThread::msleep(500);
+                qDebug("File: retrying copy (is on network)");
                 continue;
             }
         }
-        fDest = NULL;
-        fSource = NULL;
+
         DWORD attr = GetFileAttributes(QString(fSourceName).toStdWString().c_str());
-        SetFileAttributes(QString(fDestName).toStdWString().c_str(),attr);
-        return ok;
+        QString binary;binary.setNum(attr,2);
+        qDebug()<<"File: "<<fSourceName;
+        qDebug()<<"File: attributes: "<<binary;
+        if( attr!= INVALID_FILE_ATTRIBUTES){
+                SetFileAttributes(QString(fDestName).toStdWString().c_str(),attr);
+        }else{
+            qCritical()<<"File: Invalid attributes for "<<fDestName;
+        }
+
+        //if we got till here break
+        break;
     }
+    fDest->flush();
+    delete fDest;
+    delete fSource;
     fDest = NULL;
     fSource = NULL;
-    return false;
+    return ok;
 }
 
 
-bool File::copyFile(QFile *fSource, QFile *fDest)
+bool File::copyFile()
 {
     QTime savestatetime;
     savestatetime.start();
@@ -760,7 +838,7 @@ bool File::copyFile(QFile *fSource, QFile *fDest)
         qint64 readbyte = fSource->read(buffer,copysize);
         if( readbyte < 1 )
         {
-            serror = fSource->errorString().toAscii();
+            serror = fSource->errorString().toUtf8();
             return false;
         }
 
@@ -782,7 +860,7 @@ bool File::copyFile(QFile *fSource, QFile *fDest)
 
         if( writebit != readbyte )
         {
-            derror = fDest->errorString().toAscii();
+            derror = fDest->errorString().toUtf8();
             return false;
         }
 
@@ -815,7 +893,7 @@ bool File::copyFile(QFile *fSource, QFile *fDest)
                 saveCopiedSize();
             }else
             {
-                derror = fDest->errorString().toAscii();
+                derror = fDest->errorString().toUtf8();
                 return false;
             }
             savestatetime.restart();
@@ -834,141 +912,14 @@ bool File::copyFile(QFile *fSource, QFile *fDest)
     return true;
 }
 
-/*
-bool mFile::StartCopyFile()
-{
-    bool try_again=true;
-    average_speed = buffersize;
-    if(fDest==NULL)
-        fDest = new QFile(QString(fDestName));
-    if(fSource==NULL)
-        fSource = new QFile(QString(fSourceName));
-
-    while(1)
-    {
-        if(CopyThreadInfo->TestDestroy())
-        {
-            SaveCopiedSize();
-            break;
-        }
-
-
-        fSource->open(QFile::ReadOnly);
-        if( !fSource->isOpen() )
-        {
-            serror = fSource->errorString().toAscii();
-            if( ShouldRetry() )
-            {
-                QThread::msleep(500);
-                continue;
-            }else if(try_again)
-            {
-                try_again = false;
-                continue;
-            }
-            delete fSource;
-            delete fDest;
-            fSource = NULL;
-            fDest = NULL;
-            return false;
-        }
-
-
-        if((IsFirstInQueue || retry) && fDest->exists())
-            fDest->open(QFile::ReadWrite);
-        else
-        {
-            if( fDest->open(QFile::WriteOnly) )
-            {
-                FILETIME creation,lastAccess,lastModified;
-                GetFileTime((HANDLE)_get_osfhandle(fSource->handle()),&creation,&lastAccess,&lastModified);
-                SetFileTime((HANDLE)_get_osfhandle(fDest->handle()),&creation,&lastAccess,&lastModified);
-            }
-        }
-        if( !fDest->isOpen() )
-        {
-            derror = fDest->errorString().toAscii();
-            if( ShouldRetry() )
-            {
-                QThread::msleep(500);
-                continue;
-            }else if(try_again)
-            {
-                try_again = false;
-                continue;
-            }
-            delete fSource;
-            delete fDest;
-            fSource = NULL;
-            fDest = NULL;
-            return false;
-        }
-        try_again = true;
-
-        if( fsize == 0 )
-        {
-            fSource->close();
-            fDest->close();
-            return true;
-        }
-
-
-        if( IsFirstInQueue || retry)
-        {
-            double offset = GetCopiedSize();
-            fSource->seek( offset );
-            fDest->seek( offset );
-            if( retry )
-            {
-                CopyThreadInfo->addSizeDone(-mCopiedSize);
-                CopyThreadInfo->addSizeDone(offset);
-            }
-            mCopiedSize = offset;
-        }
-        else
-        {
-            if( !SetFileSize() )
-            {
-                delete fSource;
-                delete fDest;
-                fSource = NULL;
-                fDest = NULL;
-                return false;
-            }
-
-        }
-
-        bool ok = mCopyFile(fSource,fDest);
-        fSource->close();
-        fDest->close();
-
-        if(!ok)
-        {
-            QThread::msleep(500);
-            if( CopyThreadInfo->copy_type == LOCAL_NETWORK || CopyThreadInfo->copy_type == FROM_INET )
-            {
-                continue;
-            }
-        }
-        delete fSource;
-        delete fDest;
-        fSource = NULL;
-        fDest = NULL;
-        return ok;
-    }
-    delete fSource;
-    delete fDest;
-    fSource = NULL;
-    fDest = NULL;
-    return false;
-}*/
-
 bool File::deleteDest()
 {
+
     if(copyThreadInfo->testDestroy())
         return false;
 
-    if(!copyStarted)
+
+    if(!this->hasCopyStarted())
         return true;
 
     QStringExt file = fDestName;
@@ -989,7 +940,9 @@ bool File::deleteDest()
         if ( !QFile::remove( file ) && QFile::exists(file) )
         {
             int res;
-            copyThreadInfo->sendMessage(QString("Can't remove file: ") + file + QString("\n retry?"),&res,QMessageBox::No|QMessageBox::Cancel|QMessageBox::Yes);
+            copyThreadInfo->sendMessage(QWidget::tr("Can't remove file: ") + file + QWidget::tr("\n retry?"),
+                                        &res,
+                                        QMessageBox::No|QMessageBox::Cancel|QMessageBox::Yes);
             if ( res == QMessageBox::No )
             {
                 break;
@@ -1013,7 +966,13 @@ bool File::deleteSource()
     if(copyThreadInfo->testDestroy())
         return false;
 
+    if( this->copyhandle==COPY_IGNORE ||
+            this->skip ||
+            !this->hasCopyStarted()||
+            !this->wasCopied()){
 
+        return true;
+    }
 
     QStringExt file = QString(fSourceName);
     SetFileAttributes(file.toStdWString().c_str(),FILE_ATTRIBUTE_NORMAL);
@@ -1028,7 +987,9 @@ bool File::deleteSource()
                 break;
 
             int res;
-            copyThreadInfo->sendMessage(QString("Can't remove file: ") + file + QString("\n retry?"),&res,QMessageBox::No|QMessageBox::Cancel|QMessageBox::Yes);
+            copyThreadInfo->sendMessage(QWidget::tr("Can't remove file: ") + file + QWidget::tr("\n retry?"),
+                                        &res,
+                                        QMessageBox::No|QMessageBox::Cancel|QMessageBox::Yes);
             if ( res == QMessageBox::No )
             {
                 break;

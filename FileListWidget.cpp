@@ -63,6 +63,7 @@ FileListWidget::FileListWidget(QWidget *parent) :
 
 
     treeWidget = ui->treeWidget;
+    treeWidget->hideColumn(COL_SIZE);
     treeWidget->hideColumn(COL_PATH);
 
     treeWidget->resizeColumnToContents(1);
@@ -138,7 +139,7 @@ void FileListWidget::clear()
 
 States FileListWidget::currentState()
 {
-    return STATE;
+    return state;
 }
 
 QString FileListWidget::getDestination()
@@ -152,7 +153,7 @@ void FileListWidget::setErrorList(Folder *folder, QList<File*> &filelist )
     destination = folder->getDestPath();
     ui->cbtype->hide();
 
-    STATE = STATE_ERROR;
+    state = STATE_ERROR;
     ui->treeWidget->setColumnWidth(COL_IGNORE,200);
     QFileIconProvider ip;
     folderIcon = ip.icon(QFileInfo(folder->getSourcePath()));
@@ -177,7 +178,7 @@ void FileListWidget::showAll( )
 {
     ui->treeWidget->hideColumn(COL_RETRY);
 
-    STATE = STATE_ALL;
+    state = STATE_ALL;
 
     model->setTopItems(this->topItems);
 
@@ -221,35 +222,31 @@ bool FileListWidget::testFunction(TreeItem *item)
             return false;
     }
 
-    switch(STATE)
+    switch(state)
     {
-        case STATE_IGNORED:
-            return (item->data(COL_IGNORE,Qt::CheckStateRole).toInt() == Qt::Checked);
-        break;
-        case STATE_REPLACED:
-            return (item->data(COL_REPLACE,Qt::CheckStateRole).toInt() == Qt::Checked);
-        break;
-        case STATE_RENAMED:
-            return (!item->data(COL_RENAME,Qt::DisplayRole).toString().isEmpty());
-        break;
-        case STATE_EXIST:
-            return (!item->data(COL_EXISTS,Qt::DisplayRole).toString().isEmpty());
-        break;
-        case STATE_NEWER:
-            return (item->data(COL_EXISTS,Qt::DisplayRole).toString()==tr("Newer"));
-        break;
-        case STATE_NEW:
-            return (item->data(COL_EXISTS,Qt::DisplayRole).toString().isEmpty());
-        break;
-        case STATE_OLDER:
-            return (item->data(COL_EXISTS,Qt::DisplayRole).toString()==tr("Older"));
-        break;
-        case STATE_SAME:
-            return (item->data(COL_EXISTS,Qt::DisplayRole).toString()==tr("Same Date and Size"));
-        break;
+    case STATE_IGNORED:
+        return (item->data(COL_IGNORE,Qt::CheckStateRole).toInt() == Qt::Checked);
+    case STATE_REPLACED:
+        return (item->data(COL_REPLACE,Qt::CheckStateRole).toInt() == Qt::Checked);
+    case STATE_RENAMED:
+        return (!item->data(COL_RENAME,Qt::DisplayRole).toString().isEmpty());
+    case STATE_EXIST:
+        return (!item->data(COL_EXISTS,Qt::DisplayRole).toString().isEmpty());
+    case STATE_NEWER:
+        return (item->data(COL_EXISTS,Qt::DisplayRole).toString().contains(tr("Newer"),Qt::CaseInsensitive));
+    case STATE_NEW:
+        return (item->data(COL_EXISTS,Qt::DisplayRole).toString().isEmpty());
+    case STATE_OLDER:
+        return (item->data(COL_EXISTS,Qt::DisplayRole).toString().contains(tr("Older"),Qt::CaseInsensitive));
+    case STATE_SAME:
+        return (item->data(COL_EXISTS,Qt::DisplayRole).toString()==tr("Same Date and Size"));
+    case STATE_SMALLER:
+        return item->getFile()->compareSize()==File::SMALLER;
+    case STATE_BIGGER:
+        return item->getFile()->compareSize()==File::BIGGER;
 
-        default:
-            return filterActive;
+    default:
+        return filterActive;
     }
 }
 
@@ -278,7 +275,7 @@ void FileListWidget::setTopList()
         {
             //Folder
             int allow = STATE_NEW|STATE_REPLACED|STATE_RENAMED|STATE_IGNORED;
-            if(item->getFolder()->exists(false) || STATE&allow || filterActive)
+            if(item->getFolder()->exists(false) || state&allow || filterActive)
             {
                 for(int i=0;i<item->childCount();i++)
                 {
@@ -289,10 +286,10 @@ void FileListWidget::setTopList()
                     }
                     if(child->childCount()>0)
                     {
-                        if(filterActive || child->getFolder()->exists(false) || STATE&allow)
+                        if(filterActive || child->getFolder()->exists(false) || state&allow)
                             recursiv_list.append(child);
 
-                        if(STATE==STATE_RENAMED && testFunction(child))
+                        if(state==STATE_RENAMED && testFunction(child))
                             toplevelitemList.append(child);
                     }
                 }
@@ -312,46 +309,59 @@ void FileListWidget::setTopList()
     model->setTopItems(toplevelitemList);
 }
 
+
+void FileListWidget::showSmaller()
+{
+    state = STATE_SMALLER;
+    setTopList();
+}
+
+void FileListWidget::showBigger()
+{
+    state = STATE_BIGGER;
+    setTopList();
+}
+
 void FileListWidget::showSame()
 {
-    STATE = STATE_SAME;
+    state = STATE_SAME;
     setTopList();
 }
 
 void FileListWidget::showNewer()
 {
-    STATE = STATE_NEWER;
+    state = STATE_NEWER;
     setTopList();
 }
 
 void FileListWidget::showOlder()
 {
-    STATE = STATE_OLDER;
+    state = STATE_OLDER;
     setTopList();
 }
 
 void FileListWidget::showIgnored()
 {
-    STATE = STATE_IGNORED;
+    state = STATE_IGNORED;
     setTopList();
 }
 
 void FileListWidget::showReplaced()
 {
-    STATE = STATE_REPLACED;
+    state = STATE_REPLACED;
     setTopList();
 }
 
 void FileListWidget::showRenamed()
 {
-    STATE = STATE_RENAMED;
+    state = STATE_RENAMED;
     setTopList();
 }
 
 
 void FileListWidget::showNew()
 {
-    STATE = STATE_NEW;
+    state = STATE_NEW;
     setTopList();
 }
 
@@ -365,7 +375,7 @@ bool FileListWidget::showExist()
 
     int value = this->topItems.count();
     ui->progressBar->setMaximum(value);
-    STATE = STATE_EXIST;
+    state = STATE_EXIST;
 
     ui->treeWidget->hideColumn(COL_SIZE);
     ui->treeWidget->hideColumn(COL_RETRY);
@@ -415,7 +425,7 @@ void FileListWidget::on_treeWidget_customContextMenuRequested(QPoint pos)
 
     menu.addAction(tr("replace"));
 
-    if(STATE==STATE_ERROR)
+    if(state==STATE_ERROR)
         menu.addAction(tr("retry"));
 
     if(items.count()==1)
@@ -459,7 +469,7 @@ void FileListWidget::on_treeWidget_customContextMenuRequested(QPoint pos)
     {
         bool ignore = !((TreeItem*) items[0].internalPointer())->data(COL_IGNORE,Qt::CheckStateRole).toBool();
         foreach(QModelIndex index,items)
-        {  
+        {
             TreeItem *item = (TreeItem*) index.internalPointer();
             item->ignoreExisting(ignore);
             ui->treeWidget->update(index);
@@ -476,7 +486,7 @@ void FileListWidget::on_treeWidget_customContextMenuRequested(QPoint pos)
             ui->treeWidget->update(index);
         }
     }
-    if( action->text() == "replace")
+    if( action->text() == tr("replace"))
     {
         bool replace = !((TreeItem*) items[0].internalPointer())->data(COL_REPLACE,Qt::CheckStateRole).toInt();
         foreach(QModelIndex index,items)
@@ -487,7 +497,7 @@ void FileListWidget::on_treeWidget_customContextMenuRequested(QPoint pos)
         }
     }
 
-    if(action->text() == "Open destination")
+    if(action->text() == tr("Open destination"))
     {
         TreeItem *item = (TreeItem*) items[0].internalPointer();
 
@@ -498,7 +508,7 @@ void FileListWidget::on_treeWidget_customContextMenuRequested(QPoint pos)
             Folder* folder = item->getFolder();
             if(!folder->exists())
                 return;
-            pathIn = folder->getDestPath(false);
+            pathIn = folder->getDestPath(Folder::RelativePath);
         }else
         {
             File* file = item->getFile();
@@ -517,12 +527,13 @@ void FileListWidget::on_treeWidget_customContextMenuRequested(QPoint pos)
 
         QStringList args;
         args << "/select," << QDir::toNativeSeparators(pathIn);
+        qDebug()<<tr("FileListWidget: Open ")<<args;
 
         QProcess::startDetached("explorer", args);
     }
 
 
-    if(action->text() == "Open source")
+    if(action->text() == tr("Open source"))
     {
         TreeItem *item = (TreeItem*) items[0].internalPointer();
 
@@ -531,7 +542,7 @@ void FileListWidget::on_treeWidget_customContextMenuRequested(QPoint pos)
         if(item->getFolder())
         {
             Folder* folder = item->getFolder();
-            pathIn = folder->getSourcePath(false);
+            pathIn = folder->getSourcePath(Folder::RelativePath);
             //check if folder exist
             // could be created manually
             QDir dir(pathIn);
@@ -544,7 +555,7 @@ void FileListWidget::on_treeWidget_customContextMenuRequested(QPoint pos)
         }
 
         QStringList args;
-        args << "/select," << QDir::toNativeSeparators(pathIn);
+        args << tr("/select,") << QDir::toNativeSeparators(pathIn);
 
         QProcess::startDetached("explorer", args);
     }
@@ -568,7 +579,7 @@ void FileListWidget::on_treeWidget_expanded(QModelIndex index)
             if(NcSettings::isExiting())
                 break;
 
-            if( STATE == STATE_EXIST)
+            if( state == STATE_EXIST)
             {
                 //Only show files and folder that exists in destination
                 // Hide the others
@@ -592,7 +603,7 @@ void FileListWidget::on_treeWidget_expanded(QModelIndex index)
             if(NcSettings::isExiting())
                 break;
 
-            if( STATE == STATE_EXIST)
+            if( state == STATE_EXIST)
             {
                 //Only show files and folder that exists in destination
                 // Hide the others
@@ -623,32 +634,38 @@ void FileListWidget::on_cbtype_activated(int index)
 
     switch(index)
     {
-        case 0:
-            showAll();
+    case 0:
+        showAll();
         break;
-        case 1:
-            showExist();
+    case 1:
+        showExist();
         break;
-        case 2:
-            showSame();
+    case 2:
+        showSame();
         break;
-        case 3:
-            showNewer();
+    case 3:
+        showSmaller();
         break;
-        case 4:
-            showOlder();
+    case 4:
+       showBigger ();
         break;
-        case 5:
-            showNew();
+    case 5:
+        showNewer();
         break;
-        case 6:
-            showIgnored();
+    case 6:
+        showOlder();
         break;
-        case 7:
-            showReplaced();
+    case 7:
+        showNew();
         break;
-        case 8:
-            showRenamed();
+    case 8:
+        showIgnored();
+        break;
+    case 9:
+        showReplaced();
+        break;
+    case 10:
+        showRenamed();
         break;
     }
     ui->cbtype->setEnabled(true);
@@ -678,7 +695,6 @@ void FileListWidget::on_searchInput_returnPressed()
 
     filterExpr = ui->searchInput->text();
     filterActive = true;
-    qDebug()<<filterExpr;
 
     setTopList();
 
@@ -763,6 +779,6 @@ void FileListWidget::updateIcons()
         ui->searchInput->setButtonPixmap(FancyLineEdit::Left, pixmap);
     } else {
         ui->searchInput->setButtonPixmap(FancyLineEdit::Left,
-                                       pixmapForFindFlags(effectiveFlags));
+                                         pixmapForFindFlags(effectiveFlags));
     }
 }

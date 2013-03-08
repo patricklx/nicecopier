@@ -3,16 +3,17 @@
 # Project created by QtCreator 2010-11-13T16:29:58
 #
 #-------------------------------------------------
+QT += core
+QT += gui
+QT += widgets
+QT += network
+QT += xml
 
-
-QT       += core gui
-QT       += network
-QT       += xml
-
-TARGET = NiceCopier
 TEMPLATE = app
+TARGET = NiceCopier
 
-
+INCLUDEPATH += .
+QMAKE_CXXFLAGS += /DNOMINMAX
 
 
 SOURCES +=\
@@ -84,23 +85,6 @@ FORMS    += nicecopier.ui \
     tasks_dialog_t.ui \
     task_widget_t.ui
 
-DEFINES += MY_EXTENSION
-QMAKE_CFLAGS_RELEASE= -O -O3 -pedantic -Wall -Wextra
-QMAKE_CXXFLAGS_RELEASE = -O -O3
-QMAKE_CXXFLAGS += -Wuninitialized -Wall -Wextra
-
-
-RESOURCES += \
-    resource.qrc
-
-    RC_FILE = appico.rc
-
-    CONFIG(release, debug|release)    {
-        message (release build)
-       CONFIG += static
-       LIBS += -L$$[QT_INSTALL_PLUGINS]/imageformats -lqico
-       QMAKE_LFLAGS += -static-libgcc
-    }
 
 OTHER_FILES += \
     appico.rc \
@@ -145,62 +129,30 @@ message(qt-version: $$[QT_VERSION])
 
 
 
+debug: DESTDIR = build/debug
+release: DESTDIR = build/release
+
+contains(CONFIG,release64){
+    message (64 bit build)
+    message ($$PWD/src)
+    release64: DESTDIR = build/release64
+}
 
 
+MOC_DIR = $${DESTDIR}/moc
+OBJECTS_DIR = $${DESTDIR}/obj
+UI_DIR = $${DESTDIR}/ui
 
+RESOURCES += \
+    resource.qrc
 
+RC_FILE = appico.rc
 
+CONFIG(release, debug|release)    {
+    message (release build)
 
+   LIBS += -L$$[QT_INSTALL_PLUGINS]/imageformats -lqico
 
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+LIBS += -lkernel32 -lAdvapi32 -lUser32

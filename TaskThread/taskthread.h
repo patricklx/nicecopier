@@ -24,25 +24,36 @@ class TaskThread : public QThread
     public:
 
         enum CopyOperation{
-            OP_MOVE,
-            OP_COPY
+            OpMove,
+            OpCopy
         };
 
-        enum CopyState{
-            NOT_STARTED,
-            PREPARING,
-            COPY,
-            VERIFY_CHECKSUM,
-            REMOVE_SOURCE,
-            REMOVE_TARGET
+        enum TaskState{
+                NotStarted,
+                Preparing,
+                PrepareDone,
+                Copy,
+                CopyDone,
+                VerifyChecksum,
+                RemovingSource,
+                RemovingTarget
         };
 
-        TaskThread(QIODevice &xml_device,  bool no_save = false);
+        enum Config{
+            ParseOnly=true,
+            ParseAndCopy=false
+        };
+        TaskThread(QIODevice &xml_device,  Config config = ParseAndCopy);
         ~TaskThread();
 
         int getTaskId();
 
-        void exit(bool force = false);
+        enum{
+            NormalExit=false,
+            ExitNow=true
+        };
+        void exit(bool force = NormalExit);
+
         void pause();
         void resume();
 
@@ -52,14 +63,12 @@ class TaskThread : public QThread
         bool isPaused();
         bool isPreparing();
         bool isExiting();
-        bool isDeletingDestination();
-        bool isDeletingSource();
 
-        bool isDeleteDestinationSet();
+        bool isDeleteDestinationScheduled();
         bool isEditEnabled();
         void disableEdit();
 
-        void enableDeleteDestination();
+        void scheduleDeleteDestination();
 
         double getActFileSize();
         double getActFileCpySize();
@@ -128,14 +137,14 @@ class TaskThread : public QThread
         void setTotalSize(double size);
 
         bool shouldVerifyChecksum();
-        void setCheckMd5(bool enable);
+        void scheduleMd5Check(bool enable);
 
-        CopyState getCurrentState();
+        TaskState getState();
 private:
 
         friend class TaskCopyQueue;
         CopyOperation copyOperationType;
-        CopyState state;
+        TaskState state;
 
         QStringExt destinationPath;
         QStringExt sourcePath;
@@ -158,9 +167,6 @@ private:
         bool deleteDest;
 
         bool checkMd5;
-
-        bool deletingDest;
-        bool deletingSource;
 
         Folder *directory;
         TaskCopyQueue fileCopyQueue;

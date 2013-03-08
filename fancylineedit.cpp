@@ -51,7 +51,7 @@
     \brief A line edit with an embedded pixmap on one side that is connected to
     a menu.
 
-    Additionally, it can display a grayed hintText (like "Type Here to")
+    Additionally, it can display a grayed hintText (like "Type Here too")
     when not focused and empty. When connecting to the changed signals and
     querying text, one has to be aware that the text is set to that hint
     text if isShowingHintText() returns true (that is, does not contain

@@ -31,6 +31,8 @@ class FileListWidget : public QWidget
         void showIgnored();
         void showReplaced();
         void showRenamed();
+        void showBigger();
+        void showSmaller();
         void setTopList( QList<TreeItem*> &itemlist, TaskThread *thread );
 
         void scrollTo(TreeItem* item);
@@ -47,16 +49,20 @@ class FileListWidget : public QWidget
 
         QString getDestination();
 
-
-
-
-    private:
+private:
         typedef enum FilterFlag {
             FilterNormal = 0,
             FilterCaseSensitively = 0x1,
             FilterWholeWords = 0x2,
             FilterRegularExpression = 0x4
         }FilterFlag;
+
+        enum Compare{
+            Name,
+            Source,
+            Target,
+            Result
+        };
 
         Ui::FileList *ui;
         QList<TreeItem*> topLevelItemsTempSearch;
@@ -67,7 +73,7 @@ class FileListWidget : public QWidget
         QString destination;
         QList<TreeItem*> topItems;
         QIcon folderIcon;
-        States STATE;
+        States state;
         bool filterActive;
         QString filterExpr;
         int filterFlags;

@@ -47,13 +47,13 @@ int TaskThread::getTaskId()
     return taskNr;
 }
 
-TaskThread::TaskThread( QIODevice &device, bool no_save  )
+TaskThread::TaskThread(QIODevice &device, Config config  )
     : QThread(),fileCopyQueue(this)
 {
     paused = false;
     shouldExit = false;
     prepareDone = false;
-    copyOperationType = OP_COPY;
+    copyOperationType = OpCopy;
     totalSizeDone = 0;
     totalSize = 0;
     totalFiles = 0;
@@ -67,37 +67,74 @@ TaskThread::TaskThread( QIODevice &device, bool no_save  )
     copyType = TaskListHandler::UNKNOWN;
     filesIgnored = false;
     edit = false;
-    deletingDest = false;
-    deletingSource = false;
     desktopPoint = QPoint(0,0);
     directory = NULL;
     checkMd5 = false;
-    state = NOT_STARTED;
+    state = NotStarted;
 
-    loadFileSuccess = loadFromXML( device, no_save );
+    loadFileSuccess = loadFromXML( device, config );
     if ( loadFileSuccess != -1 )
     {
+        if( config==ParseAndCopy ){
+
+            foreach(QString source,sourceList){
+
+                QFileInfo info(source);
+                if(!info.exists()){
+                    QMessageBox::warning(NULL,
+                                         tr("Source not found"),
+                                         tr("The source '")+source+tr("'was not found! Aborting"));
+                    loadFileSuccess = -1;
+                    return;
+                }
+            }
+        }
+
         if ( sourceList.count()  > 0 )
         {
 
             from = sourceList[0];
 
+            qDebug()<<"TaskThread: copy from: "<<from;
+
             QFileInfo f( from );
             QFileInfo d( destinationPath );
 
-            if ( f.isDir() )
+            if ( !f.isSymLink() && f.isDir() )
             {
                 sourcePath = QStringExt(f.path()).beforeLast("/")+"/";
 
             }else
             {
                 sourcePath = f.path();
+                if( !sourcePath.endsWith("/") ){
+                    sourcePath += "/";
+                }
             }
             destinationPath = d.absoluteFilePath();
-            destinationPath = getRealTargetPath(destinationPath);
+            if(config==ParseAndCopy){
+                QFileInfo info(destinationPath);
+                if(!info.exists()){
+                    QMessageBox::warning(NULL,
+                                         tr("Target not found"),
+                                         tr("The target '")+destinationPath+tr("'was not found! Aborting"));
+                    loadFileSuccess = -1;
+                    return;
+                }
+            }
+
+            destinationPath = Folder::getRealTargetPath(destinationPath);
+            if(config==ParseAndCopy){
+                QFileInfo info(destinationPath);
+                if(!info.exists()){
+                    QMessageBox::warning(NULL,
+                                         tr("Target not found"),
+                                         tr("The target '")+destinationPath+tr("'was not found! Aborting"));
+                    loadFileSuccess = -1;
+                    return;
+                }
+            }
         }
-
-
     }
     /*
     paths:
@@ -130,11 +167,11 @@ TaskThread::TaskThread( QIODevice &device, bool no_save  )
     }
 
 
-    qDebug()<<"source path: "<< sourcePath;
+    qDebug()<<"TaskThread: source path: "<< sourcePath;
     if(sourcePath.startsWith("//"))
     {
         sourceVolume = sourcePath.afterFirst(QString("//"));
-        qDebug()<<"sourceVolume: "<< sourceVolume;
+        qDebug()<<"TaskThread: sourceVolume: "<< sourceVolume;
         sourceVolume = "//" + sourceVolume.beforeFirst('/');
     }else
     {
@@ -142,64 +179,26 @@ TaskThread::TaskThread( QIODevice &device, bool no_save  )
         sourceVolume.append('/');
     }
 
-    qDebug()<<"sourceVolume: "<< sourceVolume;
+    qDebug()<<"TaskThread: sourceVolume: "<< sourceVolume;
 
 
     currentSourceDir = sourcePath;
     currentDestDir = destinationPath;
 }
 
-//There are different kind of shortcuts, one is the "Folder shortcut"
-//http://en.wikipedia.org/wiki/Symbolic_link#Folder_Shortcuts.5B11.5D
-//to test if this is one we need to check the folder properties and
-//the dekstop.ini file
-QString TaskThread::getRealTargetPath(QString target)
-{
-    DWORD attr = GetFileAttributes(target.toStdWString().c_str());
 
-    QString folderShortcutID = "{0AFACED1-E828-11D1-9187-B532F1E9575D}";
-
-    qDebug()<<"target: "<<target;
-    qDebug()<<attr;
-    if(attr&FILE_ATTRIBUTE_SYSTEM || attr&&FILE_ATTRIBUTE_READONLY){
-
-        qDebug()<<"is system or read-only";
-        if(!target.endsWith("/")){
-            target+="/";
-        }
-        QString desktopIni = target+"desktop.ini";
-        QSettings settings(desktopIni,QSettings::IniFormat);
-        qDebug()<<settings.allKeys();
-        if( settings.value(".ShellClassInfo/CLSID2") == folderShortcutID ){
-
-            QFileInfo info(target+"target.lnk");
-
-            target = info.symLinkTarget();
-
-            QFileInfo symlink(target);
-            if(symlink.isDir()){
-                target += "/";
-            }
-
-        }
-    }
-
-    qDebug()<<"real target"<<target;
-
-    return target;
-}
 
 bool TaskThread::shouldVerifyChecksum()
 {
     return checkMd5;
 }
 
-void TaskThread::setCheckMd5(bool enable)
+void TaskThread::scheduleMd5Check(bool enable)
 {
     checkMd5 = enable;
 }
 
-TaskThread::CopyState TaskThread::getCurrentState()
+TaskThread::TaskState TaskThread::getState()
 {
     return this->state;
 }
@@ -315,7 +314,6 @@ void TaskThread::setCopyType( TaskListHandler::CopyType type )
 
 void TaskThread::deleteDestination()
 {
-    deletingDest = true;
     Folder *folder = directory;
 
 
@@ -334,13 +332,16 @@ void TaskThread::deleteDestination()
 
 void TaskThread::deleteSource()
 {
-    deletingSource = true;
     if(filesIgnored)
     {
         int answer;
-        sendMessage("Some files where not copied!\n Do you want do delete the source anyway?",&answer,QMessageBox::Yes|QMessageBox::No);
 
-        if( answer == QMessageBox::No )
+        QString text = tr("Some files where not copied!\n Do you want to delete the COPIED source files?");
+        sendMessage(text,
+                    &answer,
+                    QMessageBox::Yes|QMessageBox::Abort);
+
+        if( answer == QMessageBox::Abort )
         {
             return;
         }
@@ -423,17 +424,7 @@ bool TaskThread::isExiting()
     return shouldExit;
 }
 
-bool TaskThread::isDeletingDestination()
-{
-    return deletingDest;
-}
-
-bool TaskThread::isDeletingSource()
-{
-    return deletingSource;
-}
-
-bool TaskThread::isDeleteDestinationSet()
+bool TaskThread::isDeleteDestinationScheduled()
 {
     return deleteDest;
 }
@@ -448,7 +439,7 @@ void TaskThread::disableEdit()
     edit = false;
 }
 
-void TaskThread::enableDeleteDestination()
+void TaskThread::scheduleDeleteDestination()
 {
     deleteDest = true;
 }
@@ -486,8 +477,9 @@ bool TaskThread::isPaused()
 
 bool TaskThread::testDestroy()
 {
-    if ( paused && prepareDone)
+    if ( paused && prepareDone ){
         saveAllInfo();
+    }
 
     if( QThread::currentThread() == this )
     {
@@ -511,7 +503,7 @@ void TaskThread::setItemPosition(QString item,int startIndex)
     HANDLE hExplorer = OpenProcess(PROCESS_VM, 0, explorer_pid);
     if(!hExplorer)
     {
-        qDebug("can't find explorer.exe");
+        qDebug("TaskThread: can't find explorer.exe");
         return;
     }
 
@@ -532,7 +524,7 @@ void TaskThread::setItemPosition(QString item,int startIndex)
 
     if(index == -1)
     {
-        qDebug("can't find item: %s",item.toAscii().data());
+        qDebug("TaskThread: can't find item: %s",item.toUtf8().data());
         return;
     }
 
@@ -552,7 +544,7 @@ void TaskThread::run()
 
     if ( prepareDone == false )
     {
-        this->state = TaskThread::PREPARING;
+        this->state = TaskThread::Preparing;
         prepareFiles.create(this,sourcePath,destinationPath);
 
         if(prepareFiles.prepareCopy())
@@ -562,6 +554,8 @@ void TaskThread::run()
         }
     }
 
+    this->state = TaskThread::PrepareDone;
+
     if ( !shouldExit )
     {
         emit prepared();
@@ -570,8 +564,10 @@ void TaskThread::run()
     if ( !testDestroy() )
     {
         msleep(50);
-        this->state = TaskThread::COPY;
+        this->state = TaskThread::Copy;
         fileCopyQueue.startCopyQueue();
+        qDebug("TaskThread: copy done");
+        this->state = TaskThread::CopyDone;
         QThread::msleep(50);
     }
 
@@ -592,13 +588,13 @@ void TaskThread::run()
 
     if ( shouldExit == false )
     {
-        if ( copyOperationType == OP_MOVE)
+        if ( copyOperationType == OpMove)
         {
             msleep(500);
             if ( !testDestroy() )
             {
                 currentDestDir = destinationPath;
-                this->state = TaskThread::REMOVE_SOURCE;
+                this->state = TaskThread::RemovingSource;
                 deleteSource();
             }
         }
@@ -610,7 +606,7 @@ void TaskThread::run()
         bool tmp_paused = paused;
         paused = false;
         msleep(500);
-        this->state = TaskThread::REMOVE_TARGET;
+        this->state = TaskThread::RemovingTarget;
         deleteDestination();
         shouldExit = true;
         paused = tmp_paused;
@@ -623,8 +619,8 @@ void TaskThread::xmlSaveFiles(QXmlStreamWriterExt &doc,Folder *folder)
     {
         doc.writeAttribute("source_name",folder->getSourceName());
         doc.writeAttribute("dest_name",folder->getDestName());
-        doc.writeAttribute("dest_path",folder->getDestPath(false));
-        doc.writeAttribute("source_path",folder->getSourcePath(false));
+        doc.writeAttribute("dest_path",folder->getDestPath(Folder::RelativePath));
+        doc.writeAttribute("source_path",folder->getSourcePath(Folder::RelativePath));
         doc.writeAttribute("copyhandle",folder->getCopyHandle());
 
         foreach(File *file, folder->getFileList())
@@ -663,13 +659,15 @@ void TaskThread::saveAllInfo()
     QString startedStr;
     startedStr.setNum( started );
 
+    qDebug("TaskThread: saving file info");
+
     QString taskfile;
     taskfile.sprintf("Tasks/Task%i.Task",taskNr);
 
     QFile file(taskfile);
     if( !file.open(QFile::WriteOnly) )
     {
-        sendMessage("Error: Can't open file \"" + taskfile +"\"" );
+        sendMessage(tr("Error: Can't open file \"") + taskfile +"\"" );
         return;
     }
 
@@ -679,7 +677,7 @@ void TaskThread::saveAllInfo()
     doc.setAutoFormatting(true);
 
     QString op;
-    if ( copyOperationType == OP_MOVE )
+    if ( copyOperationType == OpMove )
         op = "MOVE";
     else
         op = "COPY";
@@ -716,7 +714,6 @@ void TaskThread::saveAllInfo()
             count = sourceList.count();
             if ( count == 0 )
             {
-                doc.~QXmlStreamWriter();
                 QFile::remove(taskfile);
                 return;
             }
@@ -744,7 +741,7 @@ void TaskThread::saveAllInfo()
 
 int TaskThread::loadFromXML( QIODevice &device, bool no_save  )
 {
-    qDebug("loadFromXML");
+    qDebug("TaskThread: loadFromXML");
     bool save = false;
     if(!device.isOpen())
         return -1;
@@ -754,7 +751,7 @@ int TaskThread::loadFromXML( QIODevice &device, bool no_save  )
 
     if ( doc.hasError() )
     {
-        qWarning("Failed to load xml: %s\n\n %s",doc.errorString().toAscii().data(),device.readAll().data() );
+        qWarning("TaskThread: Failed to load xml: %s\n\n %s",doc.errorString().toUtf8().data(),device.readAll().data() );
         return -1;
     }
 
@@ -777,7 +774,7 @@ int TaskThread::loadFromXML( QIODevice &device, bool no_save  )
     started = QVariant(attr.value("STARTED").toString()).toBool();
 
     double id = attr.value("ID").toString().toDouble();
-    qDebug("loaded id:%d",id);
+    qDebug("TaskThread: loaded id:%d",id);
 
     if( attr.value("edit")=="enabled")
         edit = true;
@@ -797,12 +794,12 @@ int TaskThread::loadFromXML( QIODevice &device, bool no_save  )
     }
 
     taskNr = id;
-    qDebug("id is:%d",id);
+    qDebug("TaskThread: id is:%d",id);
 
     if ( attr.value("OP") == "COPY" )
-        copyOperationType = OP_COPY;
+        copyOperationType = OpCopy;
     else
-        copyOperationType = OP_MOVE;
+        copyOperationType = OpMove;
 
 
 
@@ -813,7 +810,6 @@ int TaskThread::loadFromXML( QIODevice &device, bool no_save  )
             doc.readNextStartElement();
             doc.readNext();
             destinationPath = doc.text().toString();
-            qDebug(destinationPath.toUtf8());
             doc.readNextStartElement();//out of path element
             doc.readNextStartElement();//out of DEST element
         }
@@ -890,7 +886,7 @@ int TaskThread::loadFromXML( QIODevice &device, bool no_save  )
 
     if(save && !no_save)
     {
-        qDebug("save info");
+        qDebug()<<"TaskThread: "<<"save info";
         saveAllInfo();
     }
 
@@ -938,14 +934,16 @@ QList<QStringExt> TaskThread::getSourceList()
 
 void TaskThread::updateTotalFiles()
 {
-    if( this->deleteDest || this->copyOperationType == OP_MOVE )
+    if( (this->state!=TaskThread::Copy
+            && this->state!=PrepareDone
+            && this->state!=TaskThread::Preparing)
+            || this->deleteDest)
     {
         totalFiles = directory->getCopiedFilesCount();
     }else
     {
         totalFiles = directory->getToBeCopiedFilesCount();
     }
-
 }
 
 void TaskThread::aquireMutex()

@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QDialog>
 #include <QSettings>
+#include <QTranslator>
 
 namespace Ui {
     class ncsettings;
@@ -51,7 +52,10 @@ class NcSettings : public QDialog
             PB_COLOR,
             CHECK_UPDATES,
             STYLE,
-            TEST_CHECKSUM
+            TEST_CHECKSUM,
+            LANGUAGE,
+            CHECK_PERMISSIONS,
+            DEBUG
         };
 
         explicit NcSettings(QWidget *parent = 0);
@@ -91,15 +95,18 @@ class NcSettings : public QDialog
 
         static void setValue(SettingsConsts setting, QVariant value);
 
-        bool fillStyleComboBox();
+        void fillStyleComboBox();
         static QString getStylePath();
-    signals:
+        void fillLangugeComboBox();
+
+signals:
         void settings_changed();
 
     private:
         Ui::ncsettings *ui;
         static QSettings *settings;
         static QString defaultStyle;
+        static QTranslator* currentTranslator;
 
         struct SettingsVals{
                 QString name;
@@ -108,6 +115,8 @@ class NcSettings : public QDialog
 
         static const struct SettingsVals settingsConsts_str[];
 
+        void initUI();
+
     private slots:
         void on_btOk_clicked();
         void on_btApply_clicked();
@@ -115,6 +124,7 @@ class NcSettings : public QDialog
         void on_progressBarColor_clicked();
 
         void on_usePlastiqueStyle_clicked(bool checked);
+        void on_langCombobox_activated(const QString &arg1);
 };
 
 #endif // NCSETTINGS_H

@@ -27,11 +27,16 @@ class CopyInfoPanel : public QFrame
         bool isStoppedByUser();
         QString getSourceListMsg();
 
-    signals:
+
+        void dragEnterEvent(QDragEnterEvent *event);
+        void dragLeaveEvent(QDragLeaveEvent *);
+        void paintEvent(QPaintEvent *e);
+signals:
         void finishedEvent(CopyInfoPanel *panel);
         void startEvent(CopyInfoPanel *panel);
         void expand(CopyInfoPanel *panel);
         void contract(CopyInfoPanel *panel);
+        void createNewTask(QIODevice &info);
 
     private:
         Ui::copyInfoPanel *ui;
@@ -67,11 +72,11 @@ class CopyInfoPanel : public QFrame
         void updateTime(  );
         void calcMidSpeed( int time );
         void updateSearchfiles( );
+        void changeEvent(QEvent *e);
+        void dropEvent(QDropEvent *e);
 
     private slots:
         void on_editGroupBox_clicked(bool checked);
-        void on_addFolderButton_clicked();
-        void on_addFileButton_clicked();
         void on_stopButton_clicked();
         void on_startButton_clicked();
         void timerUpdateGui();

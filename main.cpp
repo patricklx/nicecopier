@@ -1,34 +1,49 @@
 
-
-
-#include <QtGui/QApplication>
-#include <qplugin.h>
+#undef min
+#include <QApplication>
+#include <QtGlobal>
 #include <QString>
 #include <QDir>
 #include <QModelIndex>
 #include <qxmlstream.h>
-#include <QPlastiqueStyle>
 #include <windows.h>
 #include <QTextCodec>
 #include <QtDebug>
 #include <QFile>
+#include <qplugin.h>
 #include <QTextStream>
+#include <QStringList>
 #include <stdlib.h>
 #include <Winbase.h>
-
 #include "nicecopier.h"
 #include "TaskThread/File.h"
 #include "TaskThread/ReadableSize.h"
 #include "extensions/qstringext.h"
-
-#if defined(QT_NO_DEBUG)
-Q_IMPORT_PLUGIN(qico)
-#endif
+#include "ncsettings.h"
 
 
-void myMessageHandler(QtMsgType type, const char *msg)
+QStringList filters;
+
+void myMessageHandler(QtMsgType type,const QMessageLogContext & , const QString &msg)
 {
-    QString txt;
+    QString txt(msg);
+
+    bool ok=false;
+    foreach(QString filter, filters){
+
+        if(txt.contains(filter)){
+            ok = true;
+            break;
+        }
+    }
+
+    if(filters.isEmpty())
+        ok = true;
+
+    if(!ok){
+        return;
+    }
+
     switch (type) {
         case QtDebugMsg:
             txt = QString("Debug: %1").arg(msg);
@@ -50,32 +65,36 @@ void myMessageHandler(QtMsgType type, const char *msg)
     ts << txt << endl;
 }
 
-
 int main(int argc,char **argv)
 {
+
     QDir::setCurrent(QStringExt(argv[0]).beforeLast('\\'));
 
-    QApplication *a = new QApplication(argc, argv);
-    QStringList cmdline_args = a->arguments();
-    if( cmdline_args.contains("debug") )
+    QApplication a(argc, argv);
+    QStringList cmdline_args = a.arguments();
+    if( cmdline_args.contains("-debug") )
     {
-        qDebug("setting qMsgHandler");
-        qInstallMsgHandler(myMessageHandler);
-        qDebug("qMsgHandler set");
+        if(cmdline_args.contains("-filters")){
+            int index = cmdline_args.indexOf("-filters");
+            QString filterlist = cmdline_args.at(index+1);
+            filters = filterlist.split(",");
+        }
+
+        qDebug("main: setting qMsgHandler");
+        qInstallMessageHandler(myMessageHandler);
+        qDebug("main: qMsgHandler set");
     }
+
 
     QFile outFile("log.txt");
     outFile.remove();
-    a->setQuitOnLastWindowClosed(false);
+    a.setQuitOnLastWindowClosed(false);
 
     QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
-    QTextCodec::setCodecForCStrings(QTextCodec::codecForName("UTF-8"));
 
+    NiceCopier w;
 
-    NiceCopier *w = new NiceCopier();
-    a->exec();
-    delete w;
-    delete a;
+    a.exec();
     return 0;
 }
 /*
@@ -99,7 +118,7 @@ bool QLocalServerPrivate::addListener()
     // The old NULL dacl only allowed admins to connect for read/write.
     // Instead we create an empty dacl that allows all users to connect.
 
-    // I guess this option should be configurable, e.g.  by an "unrestricted" property in QLocalServer.
+    // I guess this option should be configurable, e.g.  by an tr("unrestricted")ed") property in QLocalServer.
 
     SECURITY_DESCRIPTOR secDesc;
     if (!::InitializeSecurityDescriptor(&secDesc, SECURITY_DESCRIPTOR_REVISION))

@@ -15,7 +15,7 @@ namespace Ui {
     class NiceCopier;
 }
 
-class NiceCopier : public QMainWindow
+class NiceCopier : public QWidget
 {
         Q_OBJECT
 
@@ -24,12 +24,11 @@ class NiceCopier : public QMainWindow
         explicit NiceCopier(QWidget *parent = 0);
         ~NiceCopier();
 
-    private:
+
+private:
         Ui::NiceCopier *ui;
         TaskListHandler *taskhandler;
         NCServer server;
-
-        QList<CopyInfoPanel*> reserved_panels;
         QList<CopyInfoPanel*> panels;
 
         MyTaskBarIcon *taskbar;
@@ -37,6 +36,7 @@ class NiceCopier : public QMainWindow
 
 
         void closeEvent(QCloseEvent *evt);
+        void changeEvent(QEvent *e);
 
     public slots:
         void addTask(QIODevice &info, bool is_new = true);
@@ -45,7 +45,7 @@ class NiceCopier : public QMainWindow
         void removeTask( CopyInfoPanel *panel );
         void setFirstPanel(CopyInfoPanel *panel);
 
-        void update();
+        void updateWindow();
         void taskIconClicked(QSystemTrayIcon::ActivationReason reason);
         void settingsChanged();
 

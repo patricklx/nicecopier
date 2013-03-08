@@ -13,10 +13,10 @@
 #include <windows.h>
 #include <shutdowntimerdialog.h>
 #include <QBuffer>
-
+#include <QBitmap>
 
 NiceCopier::NiceCopier(QWidget *parent) :
-        QMainWindow(parent),
+        QWidget(parent),
     ui(new Ui::NiceCopier)
 {
     ui->setupUi(this);
@@ -26,41 +26,37 @@ NiceCopier::NiceCopier(QWidget *parent) :
     NcSettings::load();
     settingsChanged();
 
+
     ui->tasklist->setMaxTask(NcSettings::getValue<int>(NcSettings::SHOW_TASKS));
 
 
     taskbar = new MyTaskBarIcon(this);
-    VirtualLock(taskbar,sizeof(MyTaskBarIcon));
 
     connect(&server,SIGNAL(newCopyTask(QIODevice&,QLocalSocket*)),SLOT(addTask(QIODevice&)));
     connect(taskbar,SIGNAL(activated(QSystemTrayIcon::ActivationReason)),SLOT(taskIconClicked(QSystemTrayIcon::ActivationReason)));
     connect(QCoreApplication::instance(),SIGNAL(aboutToQuit()),SLOT(aboutToQuit()));
+    connect(QApplication::desktop(),SIGNAL(workAreaResized(int)),SLOT(updateWindow()));
 
-    connect(QApplication::desktop(),SIGNAL(workAreaResized(int)),SLOT(update()));
     taskhandler = new TaskListHandler;
 
     QDir dir;
     if( !dir.mkdir("Tasks") )
     {
         QDir checkdir("Tasks");
-        if(!checkdir.exists())
-            QMessageBox::warning(this,"NiceCopier Error",tr("Failed to create the directory Tasks\n Start NiceCopier as administrator")+
-                                        " or create the directory manualy\n otherwise NiceCopier won't save the tasks!");
+        if(!checkdir.exists()){
+            QString message = QString("Failed to create the directory Tasks\n Start NiceCopier as administrator or")+
+                    "create the directory manualy\n otherwise NiceCopier won't save the tasks!";
+            QMessageBox::warning(this,
+                                 tr("NiceCopier Error"),
+                                 tr(message.toUtf8()));
+        }
     }
-
-    //reserve 5 task info panels
-    //so that the tasks starts faster
-    reserved_panels.append(new CopyInfoPanel(this,taskhandler));
-    reserved_panels.append(new CopyInfoPanel(this,taskhandler));
-    reserved_panels.append(new CopyInfoPanel(this,taskhandler));
-    reserved_panels.append(new CopyInfoPanel(this,taskhandler));
-    reserved_panels.append(new CopyInfoPanel(this,taskhandler));
 
     QTimer::singleShot(1000,this,SLOT(startTasks()));
 
     connect(&updater,SIGNAL(newerVersionAvailable()),taskbar,SLOT(newVersionAvailable()));
     connect(taskbar,SIGNAL(getUpdate()),&updater,SLOT(startDownload()));
-    update();
+    updateWindow();
 }
 
 
@@ -81,7 +77,7 @@ void NiceCopier::startTasks()
             }
         }
     }
-    update();
+    updateWindow();
 }
 
 NiceCopier::~NiceCopier()
@@ -94,7 +90,7 @@ NiceCopier::~NiceCopier()
         panels.removeFirst();
         delete p;
     }
-    qDebug("closing");
+    qDebug("NiceCopier: closing");
 
     delete ui;
     delete taskbar;
@@ -103,29 +99,24 @@ NiceCopier::~NiceCopier()
 
 void NiceCopier::addTask(QIODevice &info, bool is_new)
 {
-    CopyInfoPanel *p = reserved_panels.takeFirst();
+    CopyInfoPanel *p = new CopyInfoPanel(this,taskhandler);
     connect(p,SIGNAL(finishedEvent(CopyInfoPanel*)),SLOT(removeTask(CopyInfoPanel*)));
     connect(p,SIGNAL(startEvent(CopyInfoPanel*)),SLOT(setFirstPanel(CopyInfoPanel*)));
     connect(p,SIGNAL(expand(CopyInfoPanel*)),SLOT(expandTask(CopyInfoPanel*)));
     connect(p,SIGNAL(contract(CopyInfoPanel*)),SLOT(contractTask(CopyInfoPanel*)));
+    connect(p,SIGNAL(createNewTask(QIODevice&)),SLOT(addTask(QIODevice&)));
 
-    if(reserved_panels.count()==2)
-    {
-        reserved_panels.append(new CopyInfoPanel(this,taskhandler));
-        reserved_panels.append(new CopyInfoPanel(this,taskhandler));
-        reserved_panels.append(new CopyInfoPanel(this,taskhandler));
-    }
 
     QBuffer buffer;
     QIODevice *taskinfo = &info;
     QByteArray array;
     if(is_new)
     {
-	array = info.readAll();
-	qDebug(array);
-	buffer.setBuffer(&array);
-	buffer.open(QIODevice::ReadOnly);
-	taskinfo = &buffer;
+        array = info.readAll();
+        qDebug()<<"NiceCopier: recieved:"<<array;
+        buffer.setBuffer(&array);
+        buffer.open(QIODevice::ReadOnly);
+        taskinfo = &buffer;
     }
 
     if(!p->createTask(*taskinfo))
@@ -142,9 +133,9 @@ void NiceCopier::addTask(QIODevice &info, bool is_new)
     ui->tasklist->addTask(p);
 
     if(ui->tasklist->count()==1)
-        QTimer::singleShot(NcSettings::getValue<int>(NcSettings::TIME_UNTIL_SHOW),this,SLOT(update()));
+        QTimer::singleShot(NcSettings::getValue<int>(NcSettings::TIME_UNTIL_SHOW),this,SLOT(updateWindow()));
     else
-        update();
+        updateWindow();
 
     QFile file("Tasks/tasklist.nc");
     if(!file.open(QFile::WriteOnly))
@@ -156,7 +147,7 @@ void NiceCopier::addTask(QIODevice &info, bool is_new)
         CopyInfoPanel *panel = (CopyInfoPanel*) panels.at(i);
         QString info;
         info.sprintf("Tasks/Task%i.Task\n",panel->getTaskId());
-        file.write(info.toAscii());
+        file.write(info.toUtf8());
     }
 }
 
@@ -170,9 +161,9 @@ void NiceCopier::removeTask( CopyInfoPanel *panel )
     {
 
         if(!panel->isStoppedByUser())
-            taskbar->showMessage("Copy Finished",panel->getSourceListMsg());
+            taskbar->showMessage(tr("Copy Finished"),panel->getSourceListMsg());
     }
-    update();
+    updateWindow();
 
     delete panel;
 
@@ -187,7 +178,7 @@ void NiceCopier::removeTask( CopyInfoPanel *panel )
         if(panel->isTaskValid())
         {
             info.sprintf("Tasks/Task%i.Task\n",panel->getTaskId());
-            file.write(info.toAscii());
+            file.write(info.toUtf8());
         }
     }
 
@@ -212,7 +203,7 @@ void NiceCopier::expandTask(CopyInfoPanel *panel)
     panel->show();
     panel->setWindowTitle("NiceCopier Task");
     panel->move(NcSettings::screenCenter()-panel->rect().bottomRight()/2);
-    update();
+    updateWindow();
 }
 
 void NiceCopier::contractTask(CopyInfoPanel *panel)
@@ -221,19 +212,20 @@ void NiceCopier::contractTask(CopyInfoPanel *panel)
     ui->tasklist->insertTask(panel);
     panel->show();
     this->show();
-    update();
+    updateWindow();
 }
 
 void NiceCopier::settingsChanged()
 {
     int ap = NcSettings::getValue<int>(NcSettings::APPEARANCE);
-    Qt::WindowFlags flags;
-    if(NcSettings::getValue<bool>(NcSettings::ALWAYS_ON_TOP))
-        flags = Qt::WindowStaysOnTopHint|Qt::WindowSystemMenuHint;
+    Qt::WindowFlags flags = Qt::CustomizeWindowHint;
+    if(NcSettings::getValue<bool>(NcSettings::ALWAYS_ON_TOP)){
+        flags |= Qt::WindowStaysOnTopHint;
+    }
     switch(ap)
     {
     case NcSettings::WIN_TOOL:
-        flags = flags|Qt::Tool;
+        flags = flags|Qt::Tool|Qt::WindowCloseButtonHint;
         break;
     case NcSettings::WIN_DIALOG:
         flags = flags|Qt::Dialog;
@@ -242,9 +234,13 @@ void NiceCopier::settingsChanged()
         flags = flags|Qt::Dialog|Qt::WindowMinimizeButtonHint|Qt::WindowCloseButtonHint;
     }
     this->setWindowFlags(flags);
+    this->createWinId();
+    qDebug()<<"created: "<<this->testAttribute(Qt::WA_WState_Created);
     ui->tasklist->setMaxTask(NcSettings::getValue<int>(NcSettings::SHOW_TASKS));
     QString title;
-    title.sprintf("NiceCopier: Showing %d tasks, %d running",NcSettings::getValue<int>(NcSettings::SHOW_TASKS),ui->tasklist->count());
+    title.sprintf(tr("NiceCopier: Showing %d tasks, %d running").toUtf8(),
+                  NcSettings::getValue<int>(NcSettings::SHOW_TASKS),
+                  ui->tasklist->count());
     setWindowTitle(title);
     if(NcSettings::getValue<bool>(NcSettings::CHECK_UPDATES))
     {
@@ -265,20 +261,21 @@ void NiceCopier::settingsChanged()
         qApp->setStyleSheet("");
     }
 
-    update();
+    updateWindow();
 }
 
-void NiceCopier::update()
+void NiceCopier::updateWindow()
 {
     int items = ui->tasklist->count();
-    if(items>0)
+    if(items>0){
         show();
+        qDebug()<<"on top: "<<((this->windowFlags()&Qt::WindowStaysOnTopHint)==Qt::WindowStaysOnTopHint);
+        activateWindow();
+    }
     this->setUpdatesEnabled(false);
     setMaximumSize(ui->tasklist->minimumSize());
     setMinimumSize(ui->tasklist->minimumSize());
     adjustSize();
-
-
 
     if(items == 0)
         hide();
@@ -316,20 +313,27 @@ void NiceCopier::update()
         }
         this->move(pos);
         QString title;
-        title.sprintf("NiceCopier: Showing %d tasks, %d running",NcSettings::getValue<int>(NcSettings::SHOW_TASKS),ui->tasklist->count());
+        title.sprintf(tr("NiceCopier: Showing %d tasks, %d running").toUtf8(),
+                      NcSettings::getValue<int>(NcSettings::SHOW_TASKS),ui->tasklist->count());
         setWindowTitle(title);
 
     }
     this->setUpdatesEnabled(true);
-
 }
 
 void NiceCopier::closeEvent(QCloseEvent *evt)
 {
+    qDebug()<<"NiceCopier close event";
     if( evt->spontaneous() )
     {
-        hide();
+        if(this->isHidden()){
+            evt->accept();
+            NcSettings::setIsExiting(true);
+            QCoreApplication::exit();
+            return;
+        }
         evt->ignore();
+        hide();
     }else
     {
         evt->accept();
@@ -353,16 +357,22 @@ void NiceCopier::taskIconClicked(QSystemTrayIcon::ActivationReason reason)
         }else if(taskhandler->m_count>0)
         {
             this->show();
+            this->activateWindow();
         }else
-            taskbar->showMessage("NiceCopier","No tasks running");
+            taskbar->showMessage("NiceCopier",tr("No tasks running"));
     }
 }
-
-
-
 
 void NiceCopier::setFirstPanel(CopyInfoPanel *panel)
 {
     ui->tasklist->setFirst(panel);
+}
+
+
+void NiceCopier::changeEvent(QEvent *e)
+{
+    if( e->type()==QEvent::LanguageChange ){
+        ui->retranslateUi(this);
+    }
 }
 

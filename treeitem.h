@@ -22,7 +22,9 @@ enum States{
     STATE_REPLACED  =0x0100,
     STATE_RENAMED   =0x0200,
     STATE_NEW       =0x0400,
-    STATE_UNDEF     =0x0800
+    STATE_SMALLER   =0x0800,
+    STATE_BIGGER    =0x1000,
+    STATE_UNDEF     =0x2000
 };
 
 enum Colums{
