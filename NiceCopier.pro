@@ -9,12 +9,16 @@ QT += widgets
 QT += network
 QT += xml
 
+CONFIG += static
+DEFINES += STATIC
+
 TEMPLATE = app
 TARGET = NiceCopier
 
 INCLUDEPATH += .
-QMAKE_CXXFLAGS += /DNOMINMAX
-
+DEFINES += _WIN32_WINNT=0x0501
+QMAKE_LFLAGS = -static-libgcc -static-libstdc++ -static
+LFLAGS = -static-libgcc -static-libstdc++ -s -static
 
 SOURCES +=\
     main.cpp\
@@ -31,17 +35,17 @@ SOURCES +=\
     ncsettings.cpp \
     treeitem.cpp \
     shutdowntimerdialog.cpp \
-    recent_tasks_t.cpp \
-    tasks_dialog_t.cpp \
-    task_widget_t.cpp \
-    updater_t.cpp \
     TaskThread/File.cpp \
     TaskThread/Folder.cpp \
     extensions/qxmlstreamattributesext.cpp \
     extensions/qstringext.cpp \
     FileListWidget.cpp \
     fancylineedit.cpp \
-    filterlineedit.cpp
+    filterlineedit.cpp \
+    recenttasks.cpp \
+    taskwidget.cpp \
+    updater.cpp \
+    tasksdialog.cpp
 
 
 HEADERS  += nicecopier.h \
@@ -60,20 +64,20 @@ HEADERS  += nicecopier.h \
     ncsettings.h \
     treeitem.h \
     shutdowntimerdialog.h \
-    tasks_dialog_t.h \
     memory.h \
-    updater_t.h \
     myprogressbar.h \
     TaskThread/File.h \
     TaskThread/Folder.h \
     RecentTasks.h \
-    TaskWidget_t.h \
     extensions/qxmlstreamattributesext.h \
     extensions/qstringext.h \
     filelistwidget.h \
     extensions/filelist.h \
     fancylineedit.h \
-    filterlineedit.h
+    filterlineedit.h \
+    TaskWidget.h \
+    TasksDialog.h \
+    updater.h
 
 FORMS    += nicecopier.ui \
     copyinfopanel.ui \
@@ -128,7 +132,6 @@ message(qt-version: $$[QT_VERSION])
 
 
 
-
 debug: DESTDIR = build/debug
 release: DESTDIR = build/release
 
@@ -152,6 +155,7 @@ CONFIG(release, debug|release)    {
     message (release build)
 
    LIBS += -L$$[QT_INSTALL_PLUGINS]/imageformats -lqico
+   LIBS += -L$$[QT_INSTALL_PLUGINS]/platforms -lqwindows
 
 }
 

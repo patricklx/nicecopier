@@ -441,7 +441,23 @@ size_t File::computeBufferSize(int time)
         return 2*averageSpeed;
     }
 
-    if ( time < 400 )
+    //different timings for copying over network
+    bool reduce_size = false;
+    bool increase_size = false;
+    if( copyThreadInfo->getCopyType() == TaskListHandler::LOCAL_NETWORK
+            || copyThreadInfo->getCopyType() == TaskListHandler::FROM_INET )
+    {
+        if ( time < 1500 ){
+            increase_size = true;
+        }
+        if ( time > 3500 ){
+            reduce_size = true;
+        }
+    }else{
+
+    }
+
+    if ( increase_size )
     {
         double sp = 2*averageSpeed;
         if( sp > MAX_SIZE )
@@ -450,7 +466,7 @@ size_t File::computeBufferSize(int time)
         averageSpeed = sp;
     }
 
-    if ( time > 1500 )
+    if ( reduce_size )
     {
         double sp =  averageSpeed/2;
         if ( sp < MIN_SIZE  )

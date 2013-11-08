@@ -1,4 +1,4 @@
-#include "TaskWidget_t.h"
+#include "TaskWidget.h"
 #include "ui_task_widget_t.h"
 
 #include <QBuffer>

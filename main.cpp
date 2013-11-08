@@ -20,9 +20,12 @@
 #include "TaskThread/ReadableSize.h"
 #include "extensions/qstringext.h"
 #include "ncsettings.h"
-
+#include <QtPlugin>
 
 QStringList filters;
+
+Q_IMPORT_PLUGIN(QICOPlugin)
+
 
 void myMessageHandler(QtMsgType type,const QMessageLogContext & , const QString &msg)
 {

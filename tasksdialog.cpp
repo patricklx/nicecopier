@@ -1,8 +1,8 @@
-#include "tasks_dialog_t.h"
+#include "tasksdialog.h"
 #include "ui_tasks_dialog_t.h"
 #include "RecentTasks.h"
 #include "TaskThread/taskthread.h"
-#include "TaskWidget_t.h"
+#include "TaskWidget.h"
 #include <QStringList>
 #include <QBuffer>
 #include <QWidget>

@@ -1,4 +1,4 @@
-#include "updater_t.h"
+#include "updater.h"
 
 #include <QUrl>
 #include <QNetworkAccessManager>

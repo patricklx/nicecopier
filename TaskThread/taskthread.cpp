@@ -776,7 +776,7 @@ int TaskThread::loadFromXML( QIODevice &device, bool no_save  )
     double id = attr.value("ID").toString().toDouble();
     qDebug("TaskThread: loaded id:%d",id);
 
-    if( attr.value("edit")=="enabled")
+    if( attr.value("EDIT").toInt()==1)
         edit = true;
 
     QString fname;

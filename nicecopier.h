@@ -9,7 +9,7 @@
 #include <QLibrary>
 #include <QTimer>
 #include "RecentTasks.h"
-#include "updater_t.h"
+#include "updater.h"
 
 namespace Ui {
     class NiceCopier;

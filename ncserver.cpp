@@ -9,6 +9,9 @@
 #include <windows.h>
 #include <Aclapi.h>
 #include <io.h>
+#include <QDomDocument>
+#include "extensions/qstringext.h"
+#include <QTextCodec>
 
 NCServer::NCServer()
     :QObject()
@@ -38,26 +41,83 @@ void NCServer::acceptNewClient()
     //connect(client,SIGNAL(disconnected()),SLOT(clientDisconnected()));
     qDebug("NCServer: client accepted");
 
+    QByteArray received;
 
 
-
-    QByteArray recieved;
-
-    while(!recieved.endsWith("\n\n") && client->state()!=QLocalSocket::UnconnectedState)
+    while(!received.endsWith("\n\n") && client->state()!=QLocalSocket::UnconnectedState)
     {
+        QByteArray buffer;
         client->waitForReadyRead(100);
         QApplication::processEvents();
-        recieved += client->readAll();
+        buffer = client->readAll();
+        received += QString::fromWCharArray((const wchar_t*)buffer.constData(),buffer.length()/sizeof(wchar_t)).toLocal8Bit();
         if(NcSettings::isExiting())
             break;
     }
 
-    qDebug("NCServer: client disconnected");
+    if( !QString(received).endsWith("\n\n") ){
 
-    if( !recieved.isEmpty() )
+        qDebug() << received.length();
+        qDebug() << received ;
+        qDebug() << received.at(received.length()+1);
+
+        qDebug() << "\ndoesnt end with \\n\\n";
+        return;
+    }
+
+    qDebug("NCServer: client disconnected");
+    qDebug() << received;
+    if( !received.isEmpty() )
     {
+        QDomDocument doc;
+        QDomElement rootElement = doc.createElement("TASK_INFO");
+        QList<QByteArray> lines = received.split('\n');
+        lines.takeLast();lines.takeLast();
+        if( lines.count()<3 ){
+            return;
+        }
+
+
+        //read options
+        QByteArray line = lines.takeFirst();
+        QStringList options = QStringExt(line).afterFirst("OPTIONS:").split(';');
+        foreach(QStringExt option,options){
+
+            QString key = option.beforeFirst('=');
+            QString value = option.afterFirst('=');
+            rootElement.setAttribute(key,value);
+        }
+
+        //read target path
+        line = lines.takeFirst();
+        QDomElement targetElement = doc.createElement("DEST");
+        QDomElement textElement = doc.createElement("path");
+        QDomText textNode = doc.createTextNode(QStringExt(line).afterFirst("DEST:"));
+        textElement.appendChild(textNode);
+        targetElement.appendChild(textElement);
+
+        //read sources
+        QDomElement sourceElement = doc.createElement("SOURCE");
+        while( !lines.empty() ){
+
+            line = lines.takeFirst();
+            QDomElement pathElement = doc.createElement("path");
+            textNode = doc.createTextNode(line);
+            pathElement.appendChild(textNode);
+
+            sourceElement.appendChild(pathElement);
+        }
+
+        rootElement.appendChild(sourceElement);
+        rootElement.appendChild(targetElement);
+
+
+        doc.appendChild(rootElement);
+        received = doc.toByteArray();
+        qDebug() << received;
+
         QBuffer buffer;
-        buffer.setBuffer(&recieved);
+        buffer.setBuffer(&received);
         buffer.open(QIODevice::ReadOnly);
         newCopyTask(buffer,client);
     }

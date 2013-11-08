@@ -11,7 +11,6 @@ ShutDownTimerDialog::ShutDownTimerDialog(QWidget *parent) :
 {
     ui->setupUi(this);
     time_passed=0;
-
     this->move(NcSettings::screenCenter()-rect().bottomRight()/2);
 }
 

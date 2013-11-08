@@ -6,7 +6,7 @@
 #include <QSessionManager>
 #include "ncsettings.h"
 #include "RecentTasks.h"
-#include "tasks_dialog_t.h"
+#include "tasksdialog.h"
 
 
 MyTaskBarIcon::MyTaskBarIcon(QWidget *_parent)

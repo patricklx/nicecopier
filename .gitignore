@@ -1,0 +1,7 @@
+Makefile*
+*.pro.*
+Tasks/*
+build/*
+debug/*
+nicecopier_plugin_import.cpp
+object_script.*

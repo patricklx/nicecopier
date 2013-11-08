@@ -1,0 +1,13 @@
+Download language-template.ts and edit it with QT Linguist
+http://qt-apps.org/content/show.php/Qt+Linguist+Download?content=89360
+
+
+If you edited it, you can test it by releasing it 
+and copying the generated file to 
+{NiceCopier folder}/languages and it will 
+automatically appear in the settings dialog
+
+
+feel free to send it to me so i can upload it.
+
+I also intend to update the website to allow uploading language files :)
