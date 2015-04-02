@@ -9,33 +9,34 @@ class NiceCopier;
 
 class MyTaskBarIcon : public QSystemTrayIcon
 {
-        Q_OBJECT
+		Q_OBJECT
 
-    public:
-        MyTaskBarIcon(QWidget *_parent);
+	public:
+		MyTaskBarIcon(QWidget *_parent, bool hideIcon);
 
-    signals:
-        void addTask();
-        void getUpdate();
+	signals:
+		void addTask();
+		void getUpdate();
 
-    private slots:
-        void menuEvent(QAction *act);
-        void activated(QSystemTrayIcon::ActivationReason reason);
-        void resetTaskBarIcon();
+	private slots:
+		void menuEvent(QAction *act);
+		void activated(QSystemTrayIcon::ActivationReason reason);
+		void resetTaskBarIcon();
 
-    public slots:
-        void newVersionAvailable();
-        void askDownload();
-        void showMessage(const QString &title, const QString &msg,
-                         MessageIcon icon = Information, int msecs = 10000);
+	public slots:
+		void newVersionAvailable();
+		void askDownload();
+		void showMessage(const QString &title, const QString &msg,
+						 MessageIcon icon = Information, int msecs = 10000);
 
 
 
-    private:
-        QMenu menu;
-        NiceCopier *parent;
-        bool newerVersionAvailable;
-        QString lastMessage;
+	private:
+		QMenu menu;
+		NiceCopier *parent;
+		bool newerVersionAvailable;
+		bool hideIcon;
+		QString lastMessage;
 };
 
 #endif // MYTASKBARICON_H

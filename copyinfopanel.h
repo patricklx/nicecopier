@@ -66,6 +66,7 @@ signals:
         QList<QStringExt> sourceList;
         QString source,destination;
 
+        void preventSleep();
         void updateSize( );
         void updateFileDone();
         void updateSpeed( int time );

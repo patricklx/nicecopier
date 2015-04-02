@@ -10,15 +10,16 @@ QT += network
 QT += xml
 
 CONFIG += static
+CONFIG -= openssl-linked
+CONFIG -= openssl
 DEFINES += STATIC
 
 TEMPLATE = app
 TARGET = NiceCopier
 
-INCLUDEPATH += .
 DEFINES += _WIN32_WINNT=0x0501
 QMAKE_LFLAGS = -static-libgcc -static-libstdc++ -static
-LFLAGS = -static-libgcc -static-libstdc++ -s -static
+LFLAGS = -static-libgcc -static-libstdc++ -static
 
 SOURCES +=\
     main.cpp\
@@ -132,7 +133,6 @@ message(qt-version: $$[QT_VERSION])
 
 
 
-debug: DESTDIR = build/debug
 release: DESTDIR = build/release
 
 contains(CONFIG,release64){
@@ -140,6 +140,8 @@ contains(CONFIG,release64){
     message ($$PWD/src)
     release64: DESTDIR = build/release64
 }
+
+mydebug: DESTDIR = build/debug
 
 
 MOC_DIR = $${DESTDIR}/moc
@@ -157,6 +159,16 @@ CONFIG(release, debug|release)    {
    LIBS += -L$$[QT_INSTALL_PLUGINS]/imageformats -lqico
    LIBS += -L$$[QT_INSTALL_PLUGINS]/platforms -lqwindows
 
+}
+
+contains(CONFIG, mydebug){
+    message (debug build)
+    QMAKE_CXXFLAGS_RELEASE -= -O2
+    QMAKE_CXXFLAGS_RELEASE += -g
+    QMAKE_CFLAGS_RELEASE += -g
+    QMAKE_LFLAGS_RELEASE = -g
+}else{
+    QMAKE_LFLAGS_RELEASE += -Wl,--gc-sections
 }
 
 LIBS += -lkernel32 -lAdvapi32 -lUser32

@@ -12,48 +12,48 @@
 #include "updater.h"
 
 namespace Ui {
-    class NiceCopier;
+	class NiceCopier;
 }
 
 class NiceCopier : public QWidget
 {
-        Q_OBJECT
+		Q_OBJECT
 
 
-    public:
-        explicit NiceCopier(QWidget *parent = 0);
-        ~NiceCopier();
+	public:
+		explicit NiceCopier(bool hideIcon = 0);
+		~NiceCopier();
 
 
 private:
-        Ui::NiceCopier *ui;
-        TaskListHandler *taskhandler;
-        NCServer server;
-        QList<CopyInfoPanel*> panels;
+		Ui::NiceCopier *ui;
+		TaskListHandler *taskhandler;
+		NCServer server;
+		QList<CopyInfoPanel*> panels;
 
-        MyTaskBarIcon *taskbar;
-        Updater updater;
+		MyTaskBarIcon *taskbar;
+		Updater updater;
 
 
-        void closeEvent(QCloseEvent *evt);
-        void changeEvent(QEvent *e);
+		void closeEvent(QCloseEvent *evt);
+		void changeEvent(QEvent *e);
 
-    public slots:
-        void addTask(QIODevice &info, bool is_new = true);
+	public slots:
+		void addTask(QIODevice &info, bool is_new = true);
 
-    private slots:
-        void removeTask( CopyInfoPanel *panel );
-        void setFirstPanel(CopyInfoPanel *panel);
+	private slots:
+		void removeTask( CopyInfoPanel *panel );
+		void setFirstPanel(CopyInfoPanel *panel);
 
-        void updateWindow();
-        void taskIconClicked(QSystemTrayIcon::ActivationReason reason);
-        void settingsChanged();
+		void updateWindow();
+		void taskIconClicked(QSystemTrayIcon::ActivationReason reason);
+		void settingsChanged();
 
-        void expandTask( CopyInfoPanel *panel );
-        void contractTask( CopyInfoPanel *panel);
+		void expandTask( CopyInfoPanel *panel );
+		void contractTask( CopyInfoPanel *panel);
 
-        void startTasks();
-        void aboutToQuit();
+		void startTasks();
+		void aboutToQuit();
 };
 
 #endif // NICECOPIER_H
